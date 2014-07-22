@@ -1,0 +1,1337 @@
+DECLARE SUB openfile (filename$, filenum%, type$, reclen%, retry%)
+DECLARE SUB getseq (filenum%, g$, l%, retry%)
+DECLARE SUB putseq (filenum%, p$, retry%)
+DECLARE SUB getrandom (filenum%, t%, recnum%, retry%)
+DECLARE SUB putrandom (filenum%, t%, recnum%, retry%)
+DECLARE SUB killfile (filename$, retry%)
+DECLARE SUB checkprinter (retry%)
+DECLARE SUB menu (numberofoptions%, selection%, top%, t%, promptline%, rubout%)
+DECLARE SUB promptdisplay (prompt$, promptline%, promptfore%, promptback%, clearline%)
+DECLARE SUB displaysublevels (disp%, levelpath1$, levelpath2$)
+DECLARE SUB alertbox (top%, numberofalerts%, yesorno$)
+DECLARE SUB ruboutmenu (top%, t%, numberofoptions%)
+DECLARE SUB updateconfig (success%)
+DECLARE SUB readconfig (filename$, numberofdbs%, managername$, managernum$, success%)
+DECLARE SUB inputstr (length%, row%, startcol%, default$, type$, retvalue$, retkey$)
+DECLARE SUB compileengine (level%, delete%, success%)
+DECLARE SUB putscreenarray (put$, row%, col%, s%)
+DECLARE SUB cascadecheck (l%, n%, file$, ret%, ad%, success%)
+DECLARE SUB readdefaults (avesalessize$, salesappt2s$, appt2sFPAs$, FPAsappt1s$, appt1sapprs$, success%)
+DECLARE SUB writedefaults (avesalessize$, salesappt2s$, appt2sFPAs$, FPAsappt1s$, appt1sapprs$, success%)
+DECLARE FUNCTION monthnum2str$ (monthnum%, short%)
+DECLARE FUNCTION getlevel$ (l%, plural%, short%)
+DECLARE FUNCTION encrypt$ (in$)
+DECLARE FUNCTION add$ (a$, b$)
+DECLARE FUNCTION subtract$ (a$, b$)
+DECLARE FUNCTION decrypt$ (in$)
+
+'$INCLUDE: 'COMMON.INC'
+
+NoDataAvailable:
+DATA There Is No Data Available For *|Choose Another Period To Access|PAK|
+
+FieldDisplayData:
+DATA A Approaches,B Appts Made
+DATA C Appts Week,D 1st Appts
+DATA E 2nd Appts,F Total FPAs,G CUFSELL FPAs
+DATA H Total Sales,"  CUFSELL Sales"
+DATA I Total Comm,"  CUFSELL Comm"
+DATA J Service Calls,K Referrals
+
+AgentListData2:
+DATA To Screen|Displays The List On Screen
+DATA To Printer|Prints The List
+
+NoLeagueData:
+DATA There Is No Data Available|For A League Table|PAK|
+
+UnSuccessful:
+DATA Unsuccessful Attempt To Retrieve Data|Operation Aborted|PAK|
+
+TooLarge:
+DATA One Of The Numbers Is Too Large|Please Check The Data|PAK|
+
+UnSuccessfulTarget:
+DATA Unsuccessful Attempt To Get Target Data|Try To Do Without Target (Y/N)?|
+
+ResetDone:
+DATA Colours Reset Successfully|PAK|
+
+NoComments:
+DATA There Are No Comments Available|PAK|
+
+DefaultsDone:
+DATA Defaults Set Successfully|PAK|
+
+DoneColours:
+DATA Colours Set Successfully|PAK|
+
+ColourData:
+DATA Black,Blue,Green,Cyan
+DATA Red,Magenta,Brown,White
+DATA Grey,Lt Blue,Lt Green,Lt Cyan
+DATA Lt Red,Lt Magenta,Yellow,Brt White
+DATA AlertBox Border,AlertBox Text
+DATA Menu Border,Menu Text
+DATA Menu Title,Highlight
+DATA Prompt
+DATA DialogBox Border,DialogBox Text
+
+TimePeriodMenu:
+DATA Single Month|Reviews One Month
+DATA Month To Month|Reviews Any Chosen Period
+DATA Last Quarter|Reviews The Last Complete Three Months
+DATA Year|Reviews One Year
+DATA Year To Date|Reviews This Year To Date
+DATA Previous Menu|Returns To The Previous Menu
+
+SelectHigher:
+DATA Select A * To Access First|PAK|
+
+NoSubLevels:
+DATA There Are No * In The # To Access|PAK|
+
+
+
+FUNCTION add$ (a$, b$)
+
+        c$ = LTRIM$(STR$(VAL(LTRIM$(RTRIM$(a$))) + VAL(LTRIM$(RTRIM$(b$)))))
+        IF LTRIM$(RTRIM$(a$)) = "" AND LTRIM$(RTRIM$(b$)) = "" THEN c$ = ""
+        add$ = c$
+
+END FUNCTION
+
+SUB cascadecheck (l%, n%, file$, ret%, ad%, success%)
+
+p$ = path$
+
+FOR i% = 5 TO l% + 1 STEP -1
+        p$ = p$ + detail$(i%, 0) + "\"
+NEXT
+
+success% = 1
+ret% = 0
+IF detail$(l% + 1, 0) = "" THEN
+        RESTORE SelectHigher
+        READ al$
+        al$ = LEFT$(al$, INSTR(al$, "*") - 1) + getlevel$(l% + 1, 0, 0) + MID$(al$, INSTR(al$, "*") + 1)
+        CALL alertbox(15, 2, yn$)
+        ret% = 2
+        EXIT SUB
+END IF
+
+g$ = LCASE$(getlevel$(l% + 1, 0, 1))
+IF g$ = "snr branch" THEN g$ = "area"
+CALL readconfig(p$ + g$ + ".cfg", n%, a$, b$, s%)
+IF s% = 0 THEN success% = 0: EXIT SUB
+g$ = LCASE$(getlevel$(l%, 0, 1))
+IF g$ = "snr branch" THEN g$ = "area"
+file$ = p$ + g$ + ".dat"
+IF n% = 0 AND ad% = 0 THEN
+        RESTORE NoSubLevels
+        READ al$
+        al$ = LEFT$(al$, INSTR(al$, "*") - 1) + getlevel$(l%, 1, 0) + MID$(al$, INSTR(al$, "*") + 1)
+        al$ = LEFT$(al$, INSTR(al$, "#") - 1) + getlevel$(l% + 1, 0, 0) + MID$(al$, INSTR(al$, "#") + 1)
+        CALL alertbox(15, 2, yn$)
+        ret% = 1
+        EXIT SUB
+END IF
+
+END SUB
+
+SUB compiledb (l%, d%)
+
+IF l% < 5 THEN
+        CALL cascadecheck(l% + 1, n%, file$, ret%, 1, s%)
+        IF s% = 0 THEN GOSUB failedcomp: EXIT SUB
+        IF ret% = 2 THEN EXIT SUB
+END IF
+
+p$ = path$
+FOR i% = 5 TO l% + 1 STEP -1
+        p$ = p$ + detail$(i%, 0) + "\"
+NEXT
+g$ = LCASE$(getlevel$(l% + 1, 0, 1))
+IF g$ = "snr branch" THEN g$ = "area"
+CALL readconfig(p$ + g$ + ".cfg", n%, a$, b$, s%)
+IF s% = 0 THEN success% = 0: EXIT SUB
+g$ = LCASE$(getlevel$(l%, 0, 1))
+IF g$ = "snr branch" THEN g$ = "area"
+file$ = p$ + g$ + ".dat"
+
+IF n% = 0 AND d% = 0 THEN EXIT SUB
+
+IF d% = 0 THEN CALL promptdisplay("Compiling Database - Please Wait...", 20, VAL(MID$(colour$, 25, 2)), VAL(MID$(colour$, 27, 2)), 1)
+
+CALL compileengine(l%, d%, s%)
+IF s% = 0 THEN GOSUB failedcomp
+
+IF d% = 0 THEN CALL promptdisplay("", 20, 0, 0, 1)
+
+EXIT SUB
+
+failedcomp:
+CLOSE
+RESTORE UnSuccessful
+READ al$
+CALL alertbox(15, 3, yesorno$)
+RETURN
+
+END SUB
+
+FUNCTION decrypt$ (in$)
+
+FOR i% = 2 TO LEN(in$) STEP 2
+        x% = ASC(MID$(in$, i% - 1, 1))
+        y% = ASC(MID$(in$, i%, 1))
+        FOR j% = 4 TO 1 STEP -1
+                IF j% MOD 2 = 1 THEN
+                        y% = (y% - (x% OR (j% ^ 2 * 13)))
+                        IF y% < 0 THEN y% = 256 + y%
+                ELSE
+                        x% = (x% - (y% AND (j% * 8)))
+                        IF x% < 0 THEN x% = 256 + x%
+                END IF
+        NEXT
+e$ = e$ + CHR$(x%) + CHR$(y%)
+NEXT
+IF RIGHT$(e$, 1) = CHR$(0) THEN e$ = LEFT$(e$, LEN(e$) - 1)
+decrypt$ = e$
+
+
+END FUNCTION
+
+SUB displaycomments (startyear%, endyear%, startmonth%, endmonth%)
+
+curmonth% = VAL(LEFT$(DATE$, 2))
+curyear% = VAL(RIGHT$(DATE$, 4))
+
+IF startmonth% = endmonth% AND startyear% = endyear% THEN
+        period$ = monthnum2str$(startmonth%, 1) + " " + LTRIM$(STR$(startyear% MOD 100))
+ELSE
+        period$ = monthnum2str$(startmonth%, 1) + " " + LTRIM$(STR$(startyear% MOD 100)) + " - " + monthnum2str$(endmonth%, 1) + " " + LTRIM$(STR$(endyear% MOD 100))
+END IF
+
+p$ = path$
+
+FOR i% = 5 TO 1 STEP -1
+        p$ = p$ + detail$(i%, 0) + "\"
+NEXT
+filename$ = LEFT$(p$, LEN(p$) - 1) + "."
+
+IF startyear% < curyear% THEN
+        CALL openfile(filename$ + LTRIM$(STR$(startyear% MOD 100)), 1, "R", 148, retry%)
+        IF retry% = 0 THEN GOTO bombout2
+        l% = LOF(1) / 148
+        CLOSE #1
+        IF l% = 0 THEN
+                CALL killfile(filename$ + LTRIM$(STR$(startyear% MOD 100)), retry%)
+                IF retry% = 0 THEN GOTO bombout2
+                RESTORE NoDataAvailable
+                READ al$
+                al$ = LEFT$(al$, INSTR(al$, "*") - 1) + STR$(startyear%) + MID$(al$, INSTR(al$, "*") + 1)
+                CALL alertbox(15, 3, yn$)
+                EXIT SUB
+        END IF
+END IF
+
+IF startyear% = endyear% THEN
+        n% = (endmonth% - startmonth% + 1) * 5
+ELSE
+        n% = (13 - startmonth%) * 5 + (endyear% - startyear% - 1) * 60 + (endmonth% * 5)
+END IF
+DIM comment$(n%)
+y% = startyear%
+a% = 1
+DO
+        IF startyear% = endyear% THEN
+                beginm% = startmonth%: stopm% = endmonth%
+        ELSEIF y% = endyear% THEN
+                beginm% = 1: stopm% = endmonth%
+        ELSEIF y% = startyear% THEN
+                beginm% = startmonth%: stopm% = 12
+        ELSE
+                beginm% = 1: stopm% = 12
+        END IF
+
+        IF y% <> curyear% THEN filename$ = LEFT$(filename$, LEN(filename$) - 2) + LTRIM$(RTRIM$(STR$(y% MOD 100))) ELSE filename$ = filename$ + "db"
+        CALL openfile(filename$, 1, "R", 148, retry%)
+        IF retry% = 0 THEN GOTO bombout2
+        FOR i% = beginm% TO stopm%
+                FOR j% = 1 TO 5
+                        CALL getrandom(1, 2, (i% * 5) - 5 + j%, retry%)
+                        IF retry% = 0 THEN GOTO bombout2
+                        IF LTRIM$(RTRIM$(RIGHT$(agentweek.wholerecord, 50))) <> "" THEN comment$(a%) = agentweek.wholerecord: a% = a% + 1
+                NEXT
+                IF LEN(LTRIM$(RTRIM$(agentweek.wholerecord))) <> 0 THEN manmonths& = manmonths& + 1
+        NEXT
+        CLOSE #1
+        y% = y% + 1
+LOOP UNTIL y% > endyear%
+
+IF comment$(1) = "" THEN
+        RESTORE NoComments
+        READ al$
+        CALL alertbox(15, 2, yn$)
+        EXIT SUB
+END IF
+
+a% = a% - 1
+CLS
+CALL promptdisplay("Database Comments for " + detail$(1, 1) + " " + period$, 2, 15, 0, 1)
+LOCATE 1, 73: PRINT "ACTIVITY";
+
+n% = a%
+num% = a%
+
+IF num% < 19 THEN
+        m% = 1
+ELSE
+        IF num% MOD 18 <> 0 THEN
+                m% = INT(n% / 18) + 1
+        ELSE
+                m% = INT(n% / 18)
+        END IF
+        n% = 18
+END IF
+
+FOR b% = 1 TO m%
+c% = 1
+IF b% = m% THEN
+        n% = num%
+ELSE
+        n% = 18 * (b% - 1) + 18
+END IF
+
+FOR j% = 3 TO 22
+        CALL promptdisplay("", j%, 0, 0, 1)
+NEXT
+LOCATE 3, 2: PRINT CHR$(201); STRING$(23, 205); CHR$(209); STRING$(52, 205); CHR$(187)
+FOR i% = 1 + ((b% - 1) * 18) TO n%
+        y$ = LEFT$(comment$(i%), 4): m$ = monthnum2str(VAL(MID$(comment$(i%), 5, 2)), 0): w$ = "Week " + MID$(comment$(i%), 7, 1)
+        comment$(i%) = LTRIM$(RTRIM$(RIGHT$(comment$(i%), 50)))
+        LOCATE c% + 3, 2: PRINT CHR$(186): LOCATE c% + 3, 26: PRINT CHR$(179): LOCATE c% + 3, 79: PRINT CHR$(186)
+        LOCATE c% + 3, 4: PRINT SPACE$(21): LOCATE c% + 3, 4: PRINT m$; " "; y$; " "; w$
+        LOCATE c% + 3, 28: PRINT SPACE$(50): LOCATE c% + 3, 28: PRINT comment$(i%)
+        c% = c% + 1
+NEXT
+PRINT " "; CHR$(200); STRING$(23, 205); CHR$(207); STRING$(52, 205); CHR$(188)
+IF b% < m% THEN
+        CALL promptdisplay("Space Bar for More, Esc for Main Menu", 24, 15, 0, 1)
+        DO
+        key$ = INKEY$
+        LOOP UNTIL key$ <> ""
+        IF ASC(key$) = 27 THEN CLS : EXIT SUB
+        IF key$ <> " " THEN GOTO getkey
+ELSE
+        CALL promptdisplay("Any Key to Return to Main Menu", 24, 15, 0, 1)
+END IF
+NEXT
+getkey:
+DO
+k$ = INKEY$
+LOOP UNTIL k$ <> ""
+CLS
+EXIT SUB
+
+bombout2:
+CLOSE
+RESTORE UnSuccessful
+READ al$
+CALL alertbox(15, 3, yn$)
+CLS
+
+END SUB
+
+FUNCTION encrypt$ (in$)
+
+IF LEN(in$) MOD 2 = 1 THEN in$ = in$ + CHR$(0)
+
+FOR i% = 2 TO LEN(in$) STEP 2
+        x% = ASC(MID$(in$, i% - 1, 1))
+        y% = ASC(MID$(in$, i%, 1))
+        FOR j% = 1 TO 4
+                IF j% MOD 2 = 1 THEN
+                        y% = (y% + (x% OR (j% ^ 2 * 13))) MOD 256
+                ELSE
+                        x% = (x% + (y% AND (j% * 8))) MOD 256
+                END IF
+        NEXT
+e$ = e$ + CHR$(x%) + CHR$(y%)
+NEXT
+encrypt$ = e$
+IF RIGHT$(in$, 1) = CHR$(0) THEN in$ = LEFT$(in$, LEN(in$) - 1)
+
+END FUNCTION
+
+FUNCTION getlevel$ (l%, plural%, short%)
+
+SELECT CASE l%
+    
+        CASE 1
+        l$ = "Adviser"
+    
+        CASE 2
+        IF short% = 0 THEN l$ = "Sales Team" ELSE l$ = "Team"
+    
+        CASE 3
+        l$ = "Branch"
+    
+        CASE 4
+        IF short% = 0 THEN l$ = "Senior Branch" ELSE l$ = "Snr Branch"
+    
+        CASE 5
+        l$ = "Region"
+    
+        CASE 6
+        l$ = "Country"
+
+END SELECT
+
+IF plural% = 1 THEN
+        IF l% = 3 OR l% = 4 THEN l$ = l$ + "es" ELSE l$ = l$ + "s"
+END IF
+
+getlevel$ = l$
+
+END FUNCTION
+
+SUB insertagent (l%, name$, num$, success%)
+
+p$ = path$
+success% = 1
+IF l% > 0 THEN
+        FOR i% = 5 TO l% + 1 STEP -1
+                p$ = p$ + detail$(i%, 0) + "\"
+        NEXT
+        g$ = LCASE$(getlevel$(l% + 1, 0, 1))
+        IF g$ = "snr branch" THEN g$ = "area"
+        CALL readconfig(p$ + g$ + ".cfg", numberofdbs%, man1$, man2$, s%)
+        IF s% = 0 THEN success% = 0: EXIT SUB
+        g$ = LCASE$(getlevel$(l%, 0, 1))
+        IF g$ = "snr branch" THEN g$ = "area"
+        file$ = p$ + g$ + ".dat"
+ELSE
+        FOR i% = 5 TO 2 STEP -1
+                p$ = p$ + detail$(i%, 0) + "\"
+        NEXT
+        g$ = LCASE$(getlevel$(2, 0, 1))
+        CALL readconfig(p$ + g$ + ".cfg", numberofdbs%, man1$, man2$, s%)
+        IF s% = 0 THEN success% = 0: EXIT SUB
+        g$ = LCASE$(getlevel$(1, 0, 1))
+        file$ = p$ + g$ + "t.dat"
+END IF
+
+
+CALL openfile(file$, 1, "R", 32, retry%)
+IF retry% = 0 THEN success% = 0: EXIT SUB
+IF l% = 0 THEN numberofdbs% = LOF(1) / 32
+rec% = 1
+FOR i% = 1 TO numberofdbs%
+        CALL getrandom(1, 1, i%, retry%)
+        IF retry% = 0 THEN success% = 0: CLOSE #1: EXIT SUB
+        bname$ = LTRIM$(RTRIM$(decrypt$(agentsinteam.agentname)))
+        bnum$ = LTRIM$(RTRIM$(decrypt$(agentsinteam.agentnumber)))
+        IF INSTR(bname$, " ") > 0 AND (l% < 3) THEN
+                b$ = UCASE$(MID$(bname$, INSTR(bname$, " ") + 1))
+        ELSE
+                b$ = UCASE$(bname$)
+        END IF
+        IF INSTR(name$, " ") > 0 AND (l% < 3) THEN
+                a$ = UCASE$(MID$(name$, INSTR(name$, " ") + 1))
+        ELSE
+                a$ = UCASE$(name$)
+        END IF
+        IF a$ < b$ THEN
+                rec% = i%: EXIT FOR
+        ELSEIF a$ = b$ THEN
+                IF UCASE$(bname$) > UCASE$(name$) THEN
+                        rec% = i%: EXIT FOR
+                END IF
+        END IF
+        rec% = i% + 1
+NEXT
+
+numberofdbs% = numberofdbs% + 1
+IF rec% <= numberofdbs% - 1 THEN
+        FOR i% = numberofdbs% TO rec% STEP -1
+                CALL getrandom(1, 1, i%, retry%)
+                IF retry% = 0 THEN success% = 0: EXIT SUB
+                CALL putrandom(1, 1, i% + 1, retry%)
+                IF retry% = 0 THEN success% = 0: EXIT SUB
+        NEXT
+END IF
+name$ = name$ + SPACE$(25 - LEN(name$))
+num$ = num$ + SPACE$(7 - LEN(num$))
+agentsinteam.agentname = encrypt$(name$)
+agentsinteam.agentnumber = encrypt$(num$)
+CALL putrandom(1, 1, rec%, retry%)
+name$ = RTRIM$(name$)
+num$ = RTRIM$(num$)
+IF retry% = 0 THEN success% = 0: EXIT SUB
+CLOSE #1
+
+END SUB
+
+FUNCTION monthnum2str$ (monthnum%, short%)
+
+SELECT CASE monthnum%
+        CASE 1
+        m$ = "January"
+        CASE 2
+        m$ = "February"
+        CASE 3
+        m$ = "March"
+        CASE 4
+        m$ = "April"
+        CASE 5
+        m$ = "May"
+        CASE 6
+        m$ = "June"
+        CASE 7
+        m$ = "July"
+        CASE 8
+        m$ = "August"
+        CASE 9
+        m$ = "September"
+        CASE 10
+        m$ = "October"
+        CASE 11
+        m$ = "November"
+        CASE ELSE
+        m$ = "December"
+END SELECT
+
+IF short% = 1 THEN monthnum2str$ = LEFT$(m$, 3) ELSE monthnum2str$ = m$
+
+END FUNCTION
+
+SUB printcomments (startyear%, endyear%, startmonth%, endmonth%)
+
+curyear% = VAL(RIGHT$(DATE$, 4))
+curmonth% = VAL(LEFT$(DATE$, 2))
+
+IF startmonth% = endmonth% AND startyear% = endyear% THEN
+        period$ = monthnum2str$(startmonth%, 1) + " " + LTRIM$(STR$(startyear% MOD 100))
+ELSE
+        period$ = monthnum2str$(startmonth%, 1) + " " + LTRIM$(STR$(startyear% MOD 100)) + " - " + monthnum2str$(endmonth%, 1) + " " + LTRIM$(STR$(endyear% MOD 100))
+END IF
+info$ = "Database Comments for " + detail$(1, 1) + " " + period$
+
+p$ = path$
+
+FOR i% = 5 TO 1 STEP -1
+        p$ = p$ + detail$(i%, 0) + "\"
+NEXT
+filename$ = LEFT$(p$, LEN(p$) - 1) + "."
+
+IF startyear% < curyear% THEN
+        CALL openfile(filename$ + LTRIM$(STR$(startyear% MOD 100)), 1, "R", 148, retry%)
+        IF retry% = 0 THEN GOTO bombout5
+        l% = LOF(1) / 148
+        CLOSE #1
+        IF l% = 0 THEN
+                CALL killfile(filename$ + LTRIM$(STR$(startyear% MOD 100)), retry%)
+                IF retry% = 0 THEN GOTO bombout5
+                RESTORE NoDataAvailable
+                READ al$
+                al$ = LEFT$(al$, INSTR(al$, "*") - 1) + STR$(startyear%) + MID$(al$, INSTR(al$, "*") + 1)
+                CALL alertbox(15, 3, yn$)
+                EXIT SUB
+        END IF
+END IF
+
+IF startyear% = endyear% THEN
+        n% = (endmonth% - startmonth% + 1) * 5
+ELSE
+        n% = (13 - startmonth%) * 5 + (endyear% - startyear% - 1) * 60 + (endmonth% * 5)
+END IF
+DIM comment$(n%)
+y% = startyear%
+a% = 1
+filename$ = filename$ + "db"
+DO
+        IF startyear% = endyear% THEN
+                beginm% = startmonth%: stopm% = endmonth%
+        ELSEIF y% = endyear% THEN
+                beginm% = 1: stopm% = endmonth%
+        ELSEIF y% = startyear% THEN
+                beginm% = startmonth%: stopm% = 12
+        ELSE
+                beginm% = 1: stopm% = 12
+        END IF
+
+        IF y% <> curyear% THEN filename$ = LEFT$(filename$, LEN(filename$) - 2) + LTRIM$(RTRIM$(STR$(y% MOD 100))) ELSE filename$ = LEFT$(filename$, LEN(filename$) - 2) + "db"
+        CALL openfile(filename$, 1, "R", 148, retry%)
+        IF retry% = 0 THEN GOTO bombout5
+        FOR i% = beginm% TO stopm%
+                FOR j% = 1 TO 5
+                        CALL getrandom(1, 2, (i% * 5) - 5 + j%, retry%)
+                        IF retry% = 0 THEN GOTO bombout5
+                        IF LTRIM$(RTRIM$(RIGHT$(agentweek.wholerecord, 50))) <> "" THEN comment$(a%) = agentweek.wholerecord: a% = a% + 1
+                NEXT
+                IF LEN(LTRIM$(RTRIM$(agentweek.wholerecord))) <> 0 THEN manmonths& = manmonths& + 1
+        NEXT
+        CLOSE #1
+        y% = y% + 1
+LOOP UNTIL y% > endyear%
+
+IF comment$(1) = "" THEN
+        RESTORE NoComments
+        READ al$
+        CALL alertbox(15, 2, yn$)
+        EXIT SUB
+END IF
+
+a% = a% - 1
+IF a% / 45 = INT(a% / 45) THEN maxpage% = a% / 45 ELSE maxpage% = INT(a% / 45) + 1
+IF a% < 45 THEN maxpage% = 1
+i% = 1
+page% = 1
+CALL checkprinter(retry%)
+IF retry% = 1 THEN
+CALL promptdisplay("Printing Database Comments...", 20, 31, 0, 1)
+LPRINT CHR$(27); "6";
+GOSUB HeaderPrint2
+
+newpage2:
+LPRINT CHR$(13); CHR$(13); CHR$(13);
+LPRINT " "; CHR$(201); STRING$(76, 205); CHR$(187); " ";
+DO
+        y$ = LEFT$(comment$(i%), 4):  m$ = monthnum2str$(VAL(MID$(comment$(i%), 5, 2)), 0): w$ = "Week " + MID$(comment$(i%), 7, 1)
+        comment$(i%) = LTRIM$(RTRIM$(RIGHT$(comment$(i%), 50)))
+        LPRINT " บ "; m$; " "; y$; " "; w$; SPACE$(21 - LEN(m$ + y$ + w$) - 2); " ณ "; comment$(i%); SPACE$(50 - LEN(comment$(i%))); " บ ";
+        i% = i% + 1
+LOOP UNTIL i% > a% OR (i% MOD 45 = 0 AND page% <= maxpage%)
+LPRINT " "; CHR$(200); STRING$(76, 205); CHR$(188); " ";
+IF (i% MOD 45) <> 0 THEN
+        FOR z% = 1 TO 48 - (i% MOD 45)
+                LPRINT CHR$(13);
+        NEXT
+ELSE
+        LPRINT CHR$(13); CHR$(13); CHR$(13);
+END IF
+
+IF maxpage% > 1 THEN
+        LPRINT SPACE$(2); MID$(DATE$, 4, 2); "/"; LEFT$(DATE$, 2); "/"; RIGHT$(DATE$, 4); SPACE$(59); LTRIM$(STR$(page%)); SPACE$(9 - LEN(LTRIM$(STR$(page%))));
+ELSE
+        LPRINT SPACE$(2); MID$(DATE$, 4, 2); "/"; LEFT$(DATE$, 2); "/"; RIGHT$(DATE$, 4); SPACE$(68);
+END IF
+LPRINT CHR$(12);
+             
+IF i% < a% THEN
+        GOSUB HeaderPrint2
+        page% = page% + 1: GOTO newpage2
+END IF
+CALL promptdisplay("", 20, 0, 0, 1)
+
+END IF
+
+EXIT SUB
+
+bombout5:
+CLOSE
+RESTORE UnSuccessful
+READ al$
+CALL alertbox(15, 3, yn$)
+CLS
+
+EXIT SUB
+
+HeaderPrint2:
+
+LPRINT CHR$(13); CHR$(13); CHR$(13); CHR$(13);
+LPRINT SPACE$(63); "ษออออออออออป"
+LPRINT SPACE$(63); "บ ACTIVITY บ"
+LPRINT SPACE$(63); "ศออออออออออผ"
+LPRINT CHR$(13);
+LPRINT SPACE$((80 - LEN(info$)) / 2 + 1); info$
+LPRINT CHR$(13);
+name$ = detail$(1, 1)
+num$ = detail$(1, 0)
+detail$(1, 1) = ""
+detail$(1, 0) = ""
+CALL displaysublevels(0, levelpath1$, levelpath2$)
+detail$(1, 1) = name$
+detail$(1, 0) = num$
+
+IF levelpath2$ <> "" THEN
+        LPRINT SPACE$((80 - LEN(levelpath1$) - LEN(levelpath2$) - 3) / 2); levelpath1$ + " - " + levelpath2$;
+ELSE
+        LPRINT SPACE$((80 - LEN(levelpath1$)) / 2); levelpath1$;
+END IF
+
+RETURN
+
+END SUB
+
+SUB printscreenarray (s%, startline%, endline%)
+
+FOR row% = startline% - 1 TO endline% - 1
+        FOR col% = 0 TO 79
+                char% = scr%(row%, col%, 0, s%)
+                LPRINT CHR$(char%);
+        NEXT
+NEXT
+
+END SUB
+
+SUB putscreenarray (put$, row%, col%, s%)
+
+l% = LEN(put$)
+IF l% = 0 OR col% + l% > 81 OR col% < 1 OR row% > 25 OR row% < 1 THEN EXIT SUB
+FOR i% = 1 TO l%
+        scr%(row% - 1, i% + col% - 2, 0, s%) = ASC(MID$(put$, i%, 1))
+        scr%(row% - 1, i% + col% - 2, 1, s%) = 15
+NEXT
+
+END SUB
+
+SUB readdefaults (avesalessize$, salesappt2s$, appt2sFPAs$, FPAsappt1s$, appt1sapprs$, success%)
+
+success% = 1
+CALL openfile(path$ + "defaults.dat", 1, "SI", 1, retry%)
+IF retry% = 0 THEN success% = 0: EXIT SUB
+CALL getseq(1, avesalessize$, 0, retry%)
+IF retry% = 0 THEN success% = 0: CLOSE #1: EXIT SUB
+CALL getseq(1, salesappt2s$, 0, retry%)
+IF retry% = 0 THEN success% = 0: CLOSE #1: EXIT SUB
+CALL getseq(1, appt2sFPAs$, 0, retry%)
+IF retry% = 0 THEN success% = 0: CLOSE #1: EXIT SUB
+CALL getseq(1, FPAsappt1s$, 0, retry%)
+IF retry% = 0 THEN success% = 0: CLOSE #1: EXIT SUB
+CALL getseq(1, appt1sapprs$, 0, retry%)
+IF retry% = 0 THEN success% = 0: CLOSE #1: EXIT SUB
+CLOSE #1
+
+END SUB
+
+SUB removeagent (l%, num$, success%)
+
+p$ = path$
+success% = 1
+
+FOR i% = 5 TO l% + 1 STEP -1
+        p$ = p$ + detail$(i%, 0) + "\"
+NEXT
+
+g$ = LCASE$(getlevel$(l% + 1, 0, 1))
+IF g$ = "snr branch" THEN g$ = "area"
+CALL readconfig(p$ + g$ + ".cfg", numberofdbs%, man1$, man2$, s%)
+IF s% = 0 THEN success% = 0: EXIT SUB
+g$ = LCASE$(getlevel$(l%, 0, 1))
+IF g$ = "snr branch" THEN g$ = "area"
+file$ = p$ + g$ + ".dat"
+
+CALL openfile(file$, 1, "R", 32, retry%)
+IF retry% = 0 THEN success% = 0: EXIT SUB
+FOR i% = 1 TO numberofdbs%
+        CALL getrandom(1, 1, i%, retry%)
+        IF retry% = 0 THEN success% = 0: CLOSE #1: EXIT SUB
+        a$ = LTRIM$(RTRIM$(decrypt$(agentsinteam.agentnumber)))
+        IF a$ = num$ THEN
+                rec% = i%: EXIT FOR
+        END IF
+NEXT
+IF rec% = 0 THEN success% = 0: CLOSE #1: EXIT SUB
+
+FOR i% = rec% + 1 TO numberofdbs%
+        CALL getrandom(1, 1, i%, retry%)
+        IF retry% = 0 THEN success% = 0: EXIT SUB
+        CALL putrandom(1, 1, i% - 1, retry%)
+        IF retry% = 0 THEN success% = 0: EXIT SUB
+NEXT
+agentsinteam.agentname = ""
+agentsinteam.agentnumber = ""
+CALL putrandom(1, 1, numberofdbs%, retry%)
+
+CLOSE #1
+
+END SUB
+
+SUB resetcols
+
+colour$ = "150015001500150015000007150015001500"
+CALL updateconfig(success%)
+IF success% = 0 THEN
+        RESTORE UnSuccessful
+        READ al$
+        CALL alertbox(15, 3, yn$)
+ELSE
+        RESTORE ResetDone
+        READ al$
+        CALL alertbox(15, 2, yn$)
+END IF
+
+END SUB
+
+SUB screeninarray (s%)
+
+FOR i% = 0 TO 24
+        FOR j% = 0 TO 79
+                scr%(i%, j%, 0, s%) = SCREEN(i% + 1, j% + 1)
+                scr%(i%, j%, 1, s%) = SCREEN(i% + 1, j% + 1, 1)
+        NEXT
+NEXT
+
+END SUB
+
+SUB screenoutarray (s%)
+
+FOR i% = 0 TO 24
+        FOR j% = 0 TO 79
+                IF scr%(i%, j%, 1, 1) < 128 THEN
+                        COLOR scr%(i%, j%, 1, 1) MOD 16, INT(scr%(i%, j%, 1, 1) / 16)
+                ELSEIF scr%(i%, j%, 1, 0) > 239 THEN
+                        COLOR scr%(i%, j%, 1, 1) MOD 32, INT(scr%(i%, j%, 1, 1) / 32)
+                ELSE
+                        COLOR (scr%(i%, j%, 1, 1) - 112) MOD 32, INT((scr%(i%, j%, 1, 1) - 112) / 32)
+                END IF
+                LOCATE i% + 1, j% + 1, 0: PRINT CHR$(scr%(i%, j%, 0, s%));
+        NEXT
+NEXT
+
+END SUB
+
+SUB setcolours
+
+DIM oldc%(17)
+DIM newc%(17)
+DIM c$(15)
+DIM cdata$(8)
+RESTORE ColourData
+FOR i% = 0 TO 15
+        READ c$(i%)
+NEXT
+
+left% = 17
+top% = 4
+CLS
+LOCATE 1, 73: PRINT "ACTIVITY";
+CALL promptdisplay("Setting Colours", 2, 15, 0, 1)
+CALL promptdisplay("Up/Down to Step Through Colours, Space to Change", 24, 15, 0, 1)
+CALL promptdisplay("Esc to End Colour Setting", 25, 15, 0, 1)
+
+LOCATE top%, left%: PRINT CHR$(201); STRING$(18, 205); CHR$(209); STRING$(12, 205); CHR$(209); STRING$(12, 205); CHR$(187);
+        LOCATE top% + 1, left%: PRINT CHR$(186);
+        LOCATE top% + 1, left% + 19: PRINT CHR$(179); " Foreground "; CHR$(179); " Background "; CHR$(186);
+LOCATE top% + 2, left%: PRINT CHR$(199); STRING$(18, 205); CHR$(216); STRING$(12, 205); CHR$(216); STRING$(12, 205); CHR$(182);
+FOR i% = 3 TO 11
+        LOCATE top% + i%, left%: PRINT CHR$(186);
+        LOCATE top% + i%, left% + 19: PRINT CHR$(179);
+        LOCATE top% + i%, left% + 32: PRINT CHR$(179);
+        LOCATE top% + i%, left% + 45: PRINT CHR$(186);
+NEXT
+LOCATE top% + 12, left%: PRINT CHR$(200); STRING$(18, 205); CHR$(207); STRING$(12, 205); CHR$(207); STRING$(12, 205); CHR$(188);
+
+FOR i% = 0 TO 8
+        READ cdata$(i%)
+NEXT
+FOR i% = 0 TO 17
+        COLOR 15, 0
+        oldc%(i%) = VAL(MID$(colour$, i% * 2 + 1, 2))
+        newc%(i%) = oldc%(i%)
+        IF i% MOD 2 = 0 THEN n% = 21 ELSE n% = 34
+        LOCATE top% + INT(i% / 2) + 3, left% + n%: PRINT SPACE$(10)
+        LOCATE top% + INT(i% / 2) + 3, left% + n% + 10 - LEN(c$(newc%(i%)))
+        PRINT c$(newc%(i%));
+NEXT
+FOR i% = 0 TO 17
+        IF i% MOD 2 = 0 THEN
+                COLOR newc%(i%), newc%(i% + 1)
+                LOCATE top% + i% / 2 + 3, left% + 2: PRINT cdata$(i% / 2)
+        END IF
+NEXT
+
+colourentry:
+i% = 0
+DO
+IF i% MOD 2 = 0 THEN n% = 21 ELSE n% = 34
+LOCATE top% + INT(i% / 2) + 3, left% + n%
+COLOR 0, 15
+PRINT SPACE$(10 - LEN(c$(newc%(i%)))); c$(newc%(i%));
+DO
+        k$ = INKEY$
+LOOP UNTIL k$ <> ""
+
+IF ASC(k$) = 0 THEN
+        k% = ASC(MID$(k$, 2)) + 500
+ELSE
+        k% = ASC(k$)
+END IF
+
+SELECT CASE k%
+CASE 32
+        newc%(i%) = newc%(i%) + 1
+        IF newc%(i%) > 15 AND i% MOD 2 = 0 THEN newc%(i%) = 0
+        IF newc%(i%) > 7 AND i% MOD 2 = 1 THEN newc%(i%) = 0
+        IF i% MOD 2 = 1 THEN j% = i% - 1 ELSE j% = i%
+        COLOR newc%(j%), newc%(j% + 1)
+        LOCATE top% + INT(i% / 2) + 3, left% + 2: PRINT cdata$(INT(i% / 2))
+CASE 572
+        LOCATE top% + INT(i% / 2) + 3, left% + n%
+        COLOR 15, 0
+        PRINT SPACE$(10 - LEN(c$(newc%(i%)))); c$(newc%(i%));
+        IF i% MOD 2 = 1 THEN j% = i% - 1 ELSE j% = i%
+        COLOR newc%(j%), newc%(j% + 1)
+        LOCATE top% + INT(i% / 2) + 3, left% + 2: PRINT cdata$(INT(i% / 2))
+        i% = i% - 1: IF i% < 0 THEN i% = 17
+CASE 580
+        LOCATE top% + INT(i% / 2) + 3, left% + n%
+        COLOR 15, 0
+        PRINT SPACE$(10 - LEN(c$(newc%(i%)))); c$(newc%(i%));
+        IF i% MOD 2 = 1 THEN j% = i% - 1 ELSE j% = i%
+        COLOR newc%(j%), newc%(j% + 1)
+        LOCATE top% + INT(i% / 2) + 3, left% + 2: PRINT cdata$(INT(i% / 2))
+        i% = i% + 1: IF i% > 17 THEN i% = 0
+CASE 27
+        colour$ = ""
+        FOR i% = 0 TO 17
+                IF newc%(i%) < 10 THEN
+                        colour$ = colour$ + "0" + LTRIM$(RTRIM$(STR$(newc%(i%))))
+                ELSE
+                        colour$ = colour$ + LTRIM$(RTRIM$(STR$(newc%(i%))))
+                END IF
+        NEXT
+        CALL updateconfig(s%)
+        IF s% = 0 THEN
+                RESTORE UnSuccessful
+                READ al$
+                CALL alertbox(15, 3, yn$)
+        ELSE
+                RESTORE DoneColours
+                READ al$
+                CALL alertbox(15, 2, yn$)
+        END IF
+        COLOR 15, 0
+        CLS : EXIT SUB
+END SELECT
+LOOP
+
+END SUB
+
+SUB setdefaults
+    
+DIM field$(10)
+DIM oldfield$(10)
+
+CLS
+LOCATE 1, 73: PRINT "ACTIVITY";
+CALL promptdisplay("Default Ratios", 2, 15, 0, 1)
+CALL promptdisplay("Up/Down to Step Through Ratios", 24, 15, 0, 1)
+CALL promptdisplay("Esc to End Ratio Entry", 25, 15, 0, 1)
+left% = 17
+top% = 9
+
+LOCATE 9, left%: PRINT CHR$(201); STRING$(24, 205); CHR$(209); STRING$(17, 205); CHR$(187);
+FOR i% = 1 TO 5
+        LOCATE 9 + i%, left%: PRINT CHR$(186);
+        LOCATE 9 + i%, left% + 25: PRINT CHR$(179);
+        LOCATE 9 + i%, left% + 43: PRINT CHR$(186);
+NEXT
+LOCATE 15, left%: PRINT CHR$(200); STRING$(24, 205); CHR$(207); STRING$(17, 205); CHR$(188);
+
+LOCATE top% + 1, left% + 2: PRINT "Commission : Sales"
+LOCATE top% + 2, left% + 2: PRINT "Sales      : 2nd Appts"
+LOCATE top% + 3, left% + 2: PRINT "2nd Appts  : FPAs"
+LOCATE top% + 4, left% + 2: PRINT "FPAs       : 1st Appts"
+LOCATE top% + 5, left% + 2: PRINT "1st Appts  : Apprs"
+
+FOR i% = 1 TO 5
+        LOCATE top% + i%, left% + 34: PRINT ":"
+NEXT
+
+CALL readdefaults(a$, b$, c$, d$, e$, success%)
+oldfield$(1) = a$
+oldfield$(2) = b$
+oldfield$(3) = c$
+oldfield$(4) = d$
+oldfield$(5) = e$
+
+FOR i% = 1 TO 9 STEP 2
+        field$(i%) = LTRIM$(RTRIM$(MID$(oldfield$((i% + 1) / 2), 1, INSTR(oldfield$((i% + 1) / 2), ":") - 1)))
+        field$(i% + 1) = LTRIM$(RTRIM$(MID$(oldfield$((i% + 1) / 2), INSTR(oldfield$((i% + 1) / 2), ":") + 1, LEN(oldfield$((i% + 1) / 2)) - INSTR(oldfield$((i% + 1) / 2), ":"))))
+        LOCATE top% + ((i% + 1) / 2), left% + 29: PRINT SPACE$(4)
+        LOCATE top% + ((i% + 1) / 2), left% + 36: PRINT SPACE$(4)
+        LOCATE top% + (i% + 1) / 2, left% + 33 - LEN(field$(i%))
+        PRINT field$(i%)
+        LOCATE top% + (i% + 1) / 2, left% + 36
+        PRINT field$(i% + 1)
+NEXT i%
+
+FOR i% = 1 TO 10
+        oldfield$(i%) = field$(i%)
+NEXT
+
+defaultentry:
+i% = 1
+DO
+IF i% MOD 2 = 0 THEN j% = 36 ELSE j% = 29
+IF i% MOD 2 = 1 THEN k% = (i% + 1) / 2 ELSE k% = i% / 2
+CALL inputstr(4, top% + k%, left% + j%, field$(i%), "NUM", retvalue$, retkey$)
+field$(i%) = retvalue$
+IF retkey$ = "del" THEN field$(i%) = ""
+LOCATE top% + k%, left% + j%: PRINT SPACE$(4)
+IF j% = 29 THEN
+        LOCATE top% + k%, left% + 33 - LEN(field$(i%))
+        PRINT field$(i%)
+ELSE
+        LOCATE top% + k%, left% + 36
+        PRINT field$(i%)
+END IF
+
+IF retkey$ = "up" THEN i% = i% - 1: IF i% = 0 THEN i% = 10
+IF retkey$ = "down" OR retkey$ = "ret" THEN i% = i% + 1: IF i% = 11 THEN i% = 1
+
+LOOP UNTIL retkey$ = "esc"
+
+FOR i% = 1 TO 10
+        IF field$(i%) = "" THEN field$(i%) = oldfield$(i%)
+NEXT
+
+Change% = 0
+FOR i% = 1 TO 10
+        IF field$(i%) <> oldfield$(i%) THEN Change% = 1
+NEXT
+
+IF Change% = 1 THEN
+        FOR i% = 1 TO 5
+                oldfield$(i%) = field$((i% * 2) - 1) + ":" + field$(i% * 2)
+        NEXT
+        CALL writedefaults(oldfield$(1), oldfield$(2), oldfield$(3), oldfield$(4), oldfield$(5), success%)
+        IF success% = 0 THEN
+                RESTORE UnSuccessful
+                READ al$
+                CALL alertbox(15, 3, yn$)
+        ELSE
+                RESTORE DefaultsDone
+                READ al$
+                CALL alertbox(15, 2, y$)
+        END IF
+END IF
+
+CLS
+
+END SUB
+
+SUB setupperiod
+
+top% = 3: left% = 16
+
+RESTORE FieldDisplayData
+LOCATE 1, 73: PRINT "ACTIVITY";
+
+LOCATE top% + 1, left% + 1: PRINT CHR$(201); STRING$(44, 205); CHR$(187)
+LOCATE top% + 2, left% + 1: PRINT CHR$(186): LOCATE top% + 2, left% + 21: PRINT CHR$(179): LOCATE top% + 2, left% + 46: PRINT CHR$(186)
+LOCATE top% + 3, left% + 1: PRINT CHR$(186): LOCATE top% + 3, left% + 21: PRINT CHR$(179): LOCATE top% + 3, left% + 46: PRINT CHR$(186)
+LOCATE top% + 4, left% + 1: PRINT CHR$(186); STRING$(19, 196); CHR$(197); STRING$(12, 196); CHR$(197); STRING$(11, 196); CHR$(186)
+FOR i% = 5 TO 17
+        LOCATE top% + i%, left% + 1: PRINT CHR$(186): LOCATE top% + i%, left% + 21: PRINT CHR$(179): LOCATE top% + i%, left% + 34: PRINT CHR$(179): LOCATE top% + i%, left% + 46: PRINT CHR$(186)
+        LOCATE top% + i%, left% + 3
+        READ f$: PRINT f$
+NEXT
+LOCATE top% + 18, left% + 1: PRINT CHR$(200); STRING$(44, 205); CHR$(188)
+
+LOCATE top% + 2, left% + 24
+PRINT "Total for ณ   Monthly"
+LOCATE top% + 3, left% + 27
+PRINT "Period ณ   Average"
+
+END SUB
+
+SUB setupratioscreen
+
+
+CALL putscreenarray("ACTIVITY", 1, 73, 2)
+top$ = "ษออออออออออออออออออออออออออออออออออออออป"
+midd$ = "บ                          ณ           บ"
+bot$ = "ศออออออออออออออออออออออออออออออออออออออผ"
+left% = (80 - LEN(top$)) / 2
+CALL putscreenarray(top$, 4, left%, 2)
+FOR i% = 5 TO 13
+        CALL putscreenarray(midd$, i%, left%, 2)
+NEXT
+CALL putscreenarray(bot$, 14, left%, 2)
+CALL putscreenarray("Approaches : Appts Made", 9, left% + 2, 2)
+CALL putscreenarray("1st Appts  : Total FPAs", 10, left% + 2, 2)
+CALL putscreenarray("Total FPAs : 2nd Appts", 11, left% + 2, 2)
+CALL putscreenarray("2nd Appts  : Total Sales", 12, left% + 2, 2)
+CALL putscreenarray("Referrals  : Appts Week", 13, left% + 2, 2)
+CALL putscreenarray(" Value of Each Approach", 5, left% + 2, 2)
+CALL putscreenarray(" Value of Each 2nd Appt", 6, left% + 2, 2)
+CALL putscreenarray(" Value of Each Sale", 7, left% + 2, 2)
+
+CALL putscreenarray(top$, 18, left%, 2)
+FOR i% = 19 TO 22
+        CALL putscreenarray("บ", i%, left%, 2)
+        CALL putscreenarray("บ", i%, left% + LEN(top$) - 1, 2)
+NEXT
+CALL putscreenarray(bot$, 23, left%, 2)
+CALL putscreenarray("CUFSELL FPAs   :    % of Total FPAs", 19, left% + 2, 2)
+CALL putscreenarray("CUFSELL Sales  :    % of Total Sales", 20, left% + 2, 2)
+CALL putscreenarray("CUFSELL Comm   :    % of Total Comm", 21, left% + 2, 2)
+CALL putscreenarray(" Value of Each CUFSELL Sale :", 22, left% + 2, 2)
+
+END SUB
+
+SUB setupsingle
+
+top% = 3: left% = 4
+    
+RESTORE FieldDisplayData
+LOCATE 1, 73: PRINT "ACTIVITY";
+
+LOCATE top% + 1, left%: PRINT CHR$(201); STRING$(72, 205); CHR$(187)
+LOCATE top% + 2, left%: PRINT CHR$(186): LOCATE top% + 2, left% + 18: PRINT CHR$(179): LOCATE top% + 2, left% + 73: PRINT CHR$(186)
+LOCATE top% + 3, left%: PRINT CHR$(186); STRING$(17, 196); CHR$(197); STRING$(54, 196); CHR$(186)
+FOR i% = 4 TO 16
+        LOCATE top% + i%, left%: PRINT CHR$(186): LOCATE top% + i%, left% + 18: PRINT CHR$(179): LOCATE top% + i%, left% + 73: PRINT CHR$(186)
+        READ f$
+        LOCATE top% + i%, left% + 2: PRINT f$
+NEXT
+LOCATE top% + 17, left%: PRINT CHR$(200); STRING$(72, 205); CHR$(188)
+
+LOCATE top% + 2, left% + 21
+PRINT "Week 1   Week 2   Week 3   Week 4   Week 5    Total"
+
+END SUB
+
+SUB setuptargetscreen (weeks%)
+
+
+CALL putscreenarray("ACTIVITY", 1, 73, 3)
+bar$ = STRING$(50, 176)
+CALL putscreenarray("Progress", 3, 2, 3)
+CALL putscreenarray(" By Week", 4, 2, 3)
+CALL putscreenarray("Monthly", 3, 73, 3)
+CALL putscreenarray("Target%", 4, 73, 3)
+CALL putscreenarray("Comm      Actual", 6, 2, 3)
+CALL putscreenarray("Sales     Actual", 9, 2, 3)
+CALL putscreenarray("2nd Appts Actual", 12, 2, 3)
+CALL putscreenarray("FPAs      Actual", 15, 2, 3)
+CALL putscreenarray("1st Appts Actual", 18, 2, 3)
+CALL putscreenarray("Apprs     Actual", 21, 2, 3)
+FOR i% = 7 TO 22 STEP 3
+        CALL putscreenarray("1", i%, 20, 3)
+        CALL putscreenarray(bar$, i% - 1, 20, 3)
+        CALL putscreenarray("Target", i%, 12, 3)
+        FOR j% = 1 TO weeks% - 1
+                CALL putscreenarray(LTRIM$(STR$(j% + 1)), i%, 20 + CINT(j% * (50 / weeks%)), 3)
+        NEXT
+NEXT
+
+END SUB
+
+FUNCTION subtract$ (a$, b$)
+
+        c$ = LTRIM$(STR$(VAL(LTRIM$(RTRIM$(a$))) - VAL(LTRIM$(RTRIM$(b$)))))
+        IF LTRIM$(RTRIM$(a$)) = "" AND LTRIM$(RTRIM$(b$)) = "" THEN c$ = ""
+        subtract$ = c$
+
+END FUNCTION
+
+SUB timeselect (startmonth%, endmonth%, startyear%, endyear%, masterlev%)
+
+curyear% = VAL(RIGHT$(DATE$, 4))
+curmonth% = VAL(LEFT$(DATE$, 2))
+t% = 20
+
+DO
+RESTORE TimePeriodMenu
+option$(0) = "Time Period"
+FOR i% = 1 TO 6
+        READ option$(i%)
+NEXT
+CALL menu(6, selection%, 4, t%, 25, 0)
+ON selection% GOSUB SelectaMonth, MonthtoMonth, LastQuarter, WholeYear, YeartoDate
+LOOP UNTIL selection% = 6
+option$(0) = "Time Period"
+CALL ruboutmenu(4, t%, 6)
+EXIT SUB
+
+SelectaMonth:
+ch% = 0
+SingleMonth:
+FOR i% = 1 TO curyear% - 1991
+        option$(i%) = LTRIM$(STR$(1991 + i%)) + "|Selects" + STR$(1991 + i%)
+NEXT
+option$(curyear% - 1990) = "Next Menu|Continues To The Next Menu"
+option$(curyear% - 1989) = "Previous Menu|Returns To The Previous Menu"
+option$(0) = "Year"
+CALL menu(curyear% - 1989, selection%, 4, t% + 16, 25, 1)
+IF selection% < curyear% - 1990 THEN
+        ch% = 1
+        endyear% = selection% + 1991
+        selection% = 0
+ELSEIF selection% = curyear% - 1990 THEN
+        selection% = 0
+ELSE
+        GOTO done
+END IF
+
+SingleMonthMenu:
+FOR i% = 1 TO 12
+        option$(i%) = monthnum2str$(i%, 0) + "|Selects " + monthnum2str$(i%, 0)
+NEXT
+option$(13) = "Main Menu|Returns To The Main Menu"
+option$(14) = "Previous Menu|Returns To The Previous Menu"
+option$(0) = "Month"
+CALL menu(14, selection%, 4, t% + 16, 25, 1)
+IF selection% < 13 THEN
+        IF selection% > curmonth% AND endyear% >= curyear% THEN GOTO SingleMonthMenu ELSE endmonth% = selection%: ch% = 1
+ELSEIF selection% = 14 THEN
+        GOTO SingleMonth
+END IF
+selection% = 6
+
+done:
+IF endyear% = curyear% AND endmonth% > curmonth% THEN endmonth% = curmonth%
+startyear% = endyear%
+startmonth% = endmonth%
+RETURN
+
+MonthtoMonth:
+ch% = 0: Change% = 0
+
+StartingYear:
+FOR i% = 1 TO curyear% - 1991
+        option$(i%) = LTRIM$(STR$(1991 + i%)) + "|Selects" + STR$(1991 + i%)
+NEXT
+option$(curyear% - 1990) = "Next Menu|Continues To The Next Menu"
+option$(curyear% - 1989) = "Previous Menu|Returns To The Previous Menu"
+option$(0) = "Start Year"
+CALL menu(curyear% - 1989, selection%, 4, t% + 16, 25, 1)
+IF selection% < curyear% - 1990 THEN
+        ch% = 1
+        startyear% = selection% + 1991
+ELSEIF selection% = curyear% - 1989 THEN
+        GOTO Done2
+END IF
+
+StartingMonth:
+FOR i% = 1 TO 12
+        option$(i%) = monthnum2str$(i%, 0) + "|Selects " + monthnum2str$(i%, 0)
+NEXT
+option$(13) = "Next Menu|Continues To The Main Menu"
+option$(14) = "Previous Menu|Returns To The Previous Menu"
+option$(0) = "Start Month"
+CALL menu(14, selection%, 4, t% + 16, 25, 1)
+IF selection% < 13 THEN
+        IF selection% >= curmonth% AND startyear% = curyear% THEN GOTO StartingMonth ELSE startmonth% = selection%: ch% = 1
+ELSEIF selection% = 14 THEN
+        GOTO StartingYear
+ELSE
+        IF ch% = 0 THEN GOTO StartingMonth
+END IF
+
+EndingYear:
+IF startmonth < 12 THEN
+        n% = curyear% - startyear% + 3
+        FOR i% = 1 TO curyear% - startyear% + 1
+                option$(i%) = LTRIM$(STR$(startyear% - 1 + i%)) + "|Selects" + STR$(startyear% - 1 + i%)
+        NEXT
+ELSE
+        n% = curyear% - startyear% + 2
+        FOR i% = 1 TO curyear% - startyear%
+                option$(i%) = LTRIM$(STR$(startyear% + i%)) + "|Selects" + STR$(startyear% + i%)
+        NEXT
+END IF
+option$(n% - 1) = "Next Menu|Continues To The Next Menu"
+option$(n%) = "Previous Menu|Returns To The Previous Menu"
+option$(0) = "End Year"
+CALL menu(n%, selection%, 4, t% + 16, 25, 1)
+IF selection% <= n% - 1 THEN
+        Change% = 1
+        IF startmonth% < 12 THEN
+                endyear% = selection% + startyear% - 1
+        ELSE
+                endyear% = selection% + startyear%
+        END IF
+ELSEIF selection% = n% THEN
+        GOTO StartingMonth
+END IF
+
+EndingMonth:
+FOR i% = 1 TO 12
+        option$(i%) = monthnum2str$(i%, 0) + "|Selects " + monthnum2str$(i%, 0)
+NEXT
+option$(13) = "Next Menu|Continues To The Main Menu"
+option$(14) = "Previous Menu|Returns To The Previous Menu"
+option$(0) = "End Month"
+CALL menu(14, selection%, 4, t% + 16, 25, 1)
+IF selection% <= 13 THEN
+        IF (selection% > curmonth% AND endyear% = curyear%) OR (selection% <= startmonth% AND endyear% = startyear%) THEN GOTO EndingMonth ELSE endmonth% = selection%: Change% = 1
+        selection% = 6
+ELSEIF selection% = 14 THEN
+        GOTO EndingYear
+ELSE
+        IF Change% = 0 THEN GOTO EndingMonth ELSE selection% = 6
+END IF
+
+Done2:
+IF startmonth% > endmonth% AND startyear% >= endyear% THEN endyear% = curyear%: endmonth% = curmonth%
+RETURN
+
+LastQuarter:
+startmonth% = curmonth% - 3
+IF startmonth% < 1 THEN
+        startmonth% = 12 + startmonth%
+        startyear% = curyear% - 1
+ELSE
+        startyear% = curyear%
+END IF
+endmonth% = curmonth% - 1
+IF endmonth% < 1 THEN
+        endmonth% = 12 + endmonth%
+        endyear% = curyear% - 1
+ELSE
+        endyear% = curyear%
+END IF
+selection% = 6
+RETURN
+
+WholeYear:
+FOR i% = 1 TO curyear% - 1991
+        option$(i%) = LTRIM$(STR$(1991 + i%)) + "|Selects" + STR$(1991 + i%)
+NEXT
+option$(curyear% - 1990) = "Previous Menu|Returns To The Previous Menu"
+option$(0) = "Year"
+CALL menu(curyear% - 1990, selection%, 4, t% + 16, 25, 1)
+IF selection% < curyear% - 1990 THEN
+        endyear% = selection% + 1991
+        selection% = 6
+ELSE
+        selection% = 0: RETURN
+END IF
+
+startyear% = endyear%
+startmonth% = 1: IF endyear% = curyear% THEN endmonth% = curmonth% ELSE endmonth% = 12
+RETURN
+
+YeartoDate:
+startmonth% = 1: endmonth% = curmonth%
+endyear% = curyear%: startyear% = curyear%
+selection% = 6
+RETURN
+
+END SUB
+
+SUB writedefaults (avesalessize$, salesappt2s$, appt2sFPAs$, FPAsappt1s$, appt1sapprs$, success%)
+
+success% = 1
+CALL openfile(path$ + "\defaults.dat", 1, "SO", 1, retry%)
+IF retry% = 0 THEN success% = 0: EXIT SUB
+CALL putseq(1, avesalessize$, retry%)
+IF retry% = 0 THEN success% = 0: CLOSE #1: EXIT SUB
+CALL putseq(1, salesappt2s$, retry%)
+IF retry% = 0 THEN success% = 0: CLOSE #1: EXIT SUB
+CALL putseq(1, appt2sFPAs$, retry%)
+IF retry% = 0 THEN success% = 0: CLOSE #1: EXIT SUB
+CALL putseq(1, FPAsappt1s$, retry%)
+IF retry% = 0 THEN success% = 0: CLOSE #1: EXIT SUB
+CALL putseq(1, appt1sapprs$, retry%)
+IF retry% = 0 THEN success% = 0: CLOSE #1: EXIT SUB
+CLOSE #1
+
+END SUB
+

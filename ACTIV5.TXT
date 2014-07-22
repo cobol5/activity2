@@ -1,0 +1,1790 @@
+DECLARE SUB openfile (filename$, filenum%, type$, reclen%, retry%)
+DECLARE SUB getrandom (filenum%, t%, recnum%, retry%)
+DECLARE SUB putrandom (filenum%, t%, recnum%, retry%)
+DECLARE SUB killfile (filename$, retry%)
+DECLARE SUB checkprinter (retry%)
+DECLARE SUB promptdisplay (prompt$, promptline%, promptfore%, promptback%, clearline%)
+DECLARE SUB displaysublevels (disp%, levelpath1$, levelpath2$)
+DECLARE SUB alertbox (top%, numberofalerts%, yesorno$)
+DECLARE SUB checkvalid (key$, type$, newkey$)
+DECLARE SUB updatedbrecnum (filename$, success%)
+DECLARE SUB readconfig (filename$, numberofdbs%, managername$, managernum$, success%)
+DECLARE SUB inputstr (length%, row%, startcol%, default$, type$, retvalue$, retkey$)
+DECLARE SUB screeninarray (s%)
+DECLARE SUB putscreenarray (put$, row%, col%, s%)
+DECLARE SUB printscreenarray (s%, startline%, endline%)
+DECLARE SUB setuptargetscreen (weeks%)
+DECLARE SUB readdefaults (avesalessize$, salesappt2s$, appt2sFPAs$, FPAsappt1s$, appt1sapprs$, success%)
+DECLARE FUNCTION ratio$ (ratio1$, ratio2$, money%)
+DECLARE FUNCTION reverseratio$ (ratio2$, r$, money%)
+DECLARE FUNCTION add$ (a$, b$)
+DECLARE FUNCTION monthnum2str$ (monthnum%, short%)
+DECLARE FUNCTION subtract$ (a$, b$)
+DECLARE FUNCTION getlevel$ (l%, plural%, short%)
+DECLARE FUNCTION decrypt$ (in$)
+
+'$INCLUDE: 'common.inc'
+
+FieldEntryData2:
+DATA Approaches,Appointments Made
+DATA Appointments This Week,1st Appointments
+DATA 2nd Appointments,Total FPAs,CUFSELL FPAs
+DATA Total Sales,CUFSELL Sales
+DATA Total Commission,CUFSELL Commission
+DATA Service Calls,Referrals
+
+TooLarge:
+DATA One Of The Numbers Is Too Large|Please Check The Data|PAK|
+
+CantGoForward:
+DATA You Cant Go Further Forward Than The Current Month|PAK|
+
+CantGoBack:
+DATA You Cant Go Further Back Than That|PAK|
+
+UnSuccessful:
+DATA Unsuccessful Attempt To Retrieve Data|Operation Aborted|PAK|
+
+TargetAdviser:
+DATA You Can Only Set Target For An Adviser|PAK|
+
+UseDefaults:
+DATA Use Default Ratios (Y/N)?|
+
+TargetLarge:
+DATA That Target Is Too Large|PAK|
+
+SUB compileengine (level%, delete%, success%)
+
+curyear% = VAL(RIGHT$(DATE$, 4))
+curmonth% = VAL(LEFT$(DATE$, 2))
+success% = 1
+IF level% = 1 AND delete% = 0 THEN EXIT SUB
+p$ = path$
+
+FOR i% = 5 TO level% + 1 STEP -1
+        p$ = p$ + detail$(i%, 0) + "\"
+NEXT
+
+g$ = LCASE$(getlevel$(level% + 1, 0, 1))
+IF g$ = "snr branch" THEN g$ = "area"
+CALL readconfig(p$ + g$ + ".cfg", numberofdbs%, a$, b$, s%)
+IF s% = 0 THEN success% = 0: EXIT SUB
+g$ = LCASE$(getlevel$(level%, 0, 1))
+IF g$ = "snr branch" THEN g$ = "area"
+lookfile$ = p$ + g$ + ".dat"
+IF level% < 5 THEN
+        unitfilename$ = LEFT$(p$, LEN(p$) - 1)
+ELSE
+        unitfilename$ = p$ + "uk"
+END IF
+IF level% = 1 THEN
+        CALL openfile(p$ + g$ + "t.dat", 1, "R", 32, retry%)
+        IF retry% = 0 THEN success% = 0: CLOSE : EXIT SUB
+        n% = numberofdbs% + LOF(1) / 32
+        CLOSE 1
+        IF n% = numberofdbs% THEN
+                CALL killfile(p$ + g$ + "t.dat", retry%)
+                IF retry% = 0 THEN success% = 0: CLOSE : EXIT SUB
+        END IF
+ELSE
+        n% = numberofdbs%
+END IF
+
+IF n% = 0 AND delete% = 0 THEN EXIT SUB
+DIM dbfilenum$(n%)
+
+CALL openfile(lookfile$, 1, "R", 32, retry%)
+IF retry% = 0 THEN success% = 0: CLOSE : EXIT SUB
+FOR i% = 1 TO numberofdbs%
+        CALL getrandom(1, 1, i%, retry%)
+        IF retry% = 0 THEN success% = 0: CLOSE : EXIT SUB
+        dbnum$ = LTRIM$(RTRIM$(decrypt$(agentsinteam.agentnumber)))
+        dbfilenum$(i%) = dbnum$
+        IF level% > 1 THEN
+                d$ = detail$(level%, 0)
+                detail$(level%, 0) = dbnum$
+                CLOSE #1: CALL compileengine(level% - 1, delete%, s%)
+                detail$(level%, 0) = d$
+                IF s% = 0 THEN success% = 0: CLOSE : EXIT SUB
+                CALL openfile(lookfile$, 1, "R", 32, retry%)
+                IF retry% = 0 THEN success% = 0: CLOSE : EXIT SUB
+        END IF
+NEXT
+CLOSE #1
+IF n% > numberofdbs% THEN
+        CALL openfile(p$ + g$ + "t.dat", 1, "R", 32, retry%)
+        IF retry% = 0 THEN success% = 0: CLOSE : EXIT SUB
+        FOR i% = numberofdbs% + 1 TO n%
+                CALL getrandom(1, 1, i%, retry%)
+                IF retry% = 0 THEN success% = 0: CLOSE : EXIT SUB
+                dbnum$ = LTRIM$(RTRIM$(decrypt$(agentsinteam.agentnumber)))
+                dbfilenum$(i%) = dbnum$
+        NEXT
+        CLOSE #1
+END IF
+
+DIM weekrec$(n%)
+DIM monthrec$(12, n% + 1)
+
+CALL updatedbrecnum(unitfilename$ + ".db", retry%)
+IF retry% = 0 THEN success% = 0: CLOSE : EXIT SUB
+FOR i% = 1 TO numberofdbs%
+        CALL updatedbrecnum(p$ + dbfilenum$(i%) + ".db", retry%)
+        IF retry% = 0 THEN success% = 0: CLOSE : EXIT SUB
+NEXT
+
+y% = curyear%
+DO
+IF y% <> curyear% THEN
+        extension$ = "." + LTRIM$(RTRIM$(STR$(y% MOD 100)))
+ELSE
+        extension$ = ".db"
+END IF
+
+unitdbfile$ = unitfilename$ + extension$
+
+CALL openfile(unitdbfile$, 1, "R", 148, retry%)
+IF retry% = 0 THEN success% = 0: CLOSE : EXIT SUB
+length% = (LOF(1) / 148)
+maxrec% = length% - 12
+IF length% = 0 THEN
+        CLOSE #1
+        CALL killfile(unitdbfile$, retry%)
+        IF retry% = 0 THEN success% = 0: CLOSE : EXIT SUB
+        EXIT SUB
+END IF
+
+FOR i% = 1 TO maxrec%
+        FOR j% = 1 TO numberofdbs%
+                CALL openfile(p$ + dbfilenum$(j%) + extension$, 2, "R", 148, retry%)
+                IF retry% = 0 THEN success% = 0: CLOSE : EXIT SUB
+                CALL getrandom(2, 2, i%, retry%)
+                IF retry% = 0 THEN success% = 0: CLOSE : EXIT SUB
+                weekrec$(j%) = agentweek.wholerecord
+                CLOSE #2
+        NEXT
+        IF n% > numberofdbs% THEN
+                FOR j% = numberofdbs% + 1 TO n%
+                        CALL openfile(p$ + dbfilenum$(j%) + "." + LTRIM$(RTRIM$(STR$(y% MOD 100))), 2, "R", 148, retry%)
+                        IF retry% = 0 THEN success% = 0: CLOSE : EXIT SUB
+                        IF i% <= LOF(2) - 12 THEN
+                                CALL getrandom(2, 2, i%, retry%)
+                                IF retry% = 0 THEN success% = 0: CLOSE : EXIT SUB
+                                weekrec$(j%) = agentweek.wholerecord
+                        ELSE
+                                IF i% / 5 = INT(i% / 5) THEN
+                                        getm% = INT(i% / 5)
+                                ELSE
+                                        getm% = INT(i% / 5) + 1
+                                END IF
+                                IF getm% < 10 THEN
+                                        getm$ = LTRIM$(RTRIM$(STR$(getm%))) + " "
+                                ELSE
+                                        getm$ = LTRIM$(RTRIM$(STR$(getm%)))
+                                END IF
+                                getw% = i% MOD 5
+                                IF getw% = 0 THEN getw% = 5
+                                getw$ = LTRIM$(RTRIM$(STR$(getw%)))
+                                weekrec$(j%) = LTRIM$(RTRIM$(STR$(y%))) + getm$ + getw$ + SPACE$(141)
+                        END IF
+                        CLOSE #2
+                NEXT
+        END IF
+
+        IF n% > 0 THEN w$ = LEFT$(weekrec$(1), 7)
+        FOR k% = 1 TO 13
+                r$ = ""
+                FOR j% = 1 TO n%
+                        r$ = add$(MID$(weekrec$(j%), 7 * k% + 1, 7), r$)
+                NEXT
+                IF LEN(r$) > 7 THEN r$ = RIGHT$(r$, 7)
+                w$ = w$ + r$ + SPACE$(7 - LEN(r$))
+        NEXT
+        IF n% = 0 THEN
+                IF i% / 5 = INT(i% / 5) THEN
+                        getm% = INT(i% / 5)
+                ELSE
+                        getm% = INT(i% / 5) + 1
+                END IF
+                IF getm% < 10 THEN
+                        getm$ = LTRIM$(RTRIM$(STR$(getm%))) + " "
+                ELSE
+                        getm$ = LTRIM$(RTRIM$(STR$(getm%)))
+                END IF
+                getw% = i% MOD 5
+                IF getw% = 0 THEN getw% = 5
+                getw$ = LTRIM$(RTRIM$(STR$(getw%)))
+                w$ = LTRIM$(RTRIM$(STR$(y%))) + getm$ + getw$ + SPACE$(141)
+        END IF
+        w$ = w$ + SPACE$(148 - LEN(w$))
+        agentweek.wholerecord = w$
+        CALL putrandom(1, 2, i%, retry%)
+        IF retry% = 0 THEN success% = 0: CLOSE : EXIT SUB
+NEXT
+    
+    
+FOR i% = 1 TO numberofdbs%
+        CALL openfile(p$ + dbfilenum$(i%) + extension$, 2, "R", 148, retry%)
+        IF retry% = 0 THEN success% = 0: CLOSE : EXIT SUB
+        FOR j% = 1 TO 12
+                CALL getrandom(2, 2, maxrec% + j%, retry%)
+                IF retry% = 0 THEN success% = 0: CLOSE : EXIT SUB
+                monthrec$(j%, i%) = agentweek.wholerecord
+        NEXT
+        CLOSE #2
+NEXT
+IF n% > numberofdbs% THEN
+        FOR i% = numberofdbs% + 1 TO n%
+                CALL openfile(p$ + dbfilenum$(i%) + "." + LTRIM$(RTRIM$(STR$(y% MOD 100))), 2, "R", 148, retry%)
+                IF retry% = 0 THEN success% = 0: CLOSE : EXIT SUB
+                tempmaxrec% = LOF(2) / 148 - 12
+                FOR j% = 1 TO 12
+                        CALL getrandom(2, 2, tempmaxrec% + j%, retry%)
+                        IF retry% = 0 THEN success% = 0: CLOSE : EXIT SUB
+                        monthrec$(j%, i%) = agentweek.wholerecord
+                NEXT
+                CLOSE #2
+        NEXT
+END IF
+
+FOR i% = 1 TO 12
+        FOR j% = 1 TO 13
+        r$ = ""
+                FOR h% = 1 TO n%
+                        r$ = add$(MID$(monthrec$(i%, h%), 7 * j% - 6, 7), r$)
+                NEXT
+        IF LEN(r$) > 7 THEN r$ = RIGHT$(r$, 7)
+        monthrec$(i%, n% + 1) = monthrec$(i%, n% + 1) + r$ + SPACE$(7 - LEN(r$))
+        NEXT
+NEXT
+
+FOR i% = 1 TO 12
+        r$ = ""
+        FOR h% = 1 TO n%
+                r$ = add$(MID$(monthrec$(i%, h%), 92, 10), r$)
+        NEXT
+        IF LEN(r$) > 7 THEN r$ = RIGHT$(r$, 7)
+        monthrec$(i%, n% + 1) = monthrec$(i%, n% + 1) + r$ + SPACE$(148 - LEN(monthrec$(i%, n% + 1)) - LEN(r$))
+NEXT
+
+FOR j% = 1 TO 12
+        agentweek.wholerecord = monthrec$(j%, n% + 1)
+        CALL putrandom(1, 2, maxrec% + j%, retry%)
+        IF retry% = 0 THEN success% = 0: CLOSE : EXIT SUB
+        monthrec$(j%, n% + 1) = ""
+NEXT
+
+CLOSE #1
+y% = y% - 1
+LOOP
+
+
+END SUB
+
+SUB dataentry
+
+curmonth% = VAL(LEFT$(DATE$, 2))
+curyear% = VAL(RIGHT$(DATE$, 4))
+rec% = (curmonth% * 5) - 4
+borderfore% = VAL(MID$(colour$, 9, 2))
+borderback% = VAL(MID$(colour$, 11, 2))
+textfore% = VAL(MID$(colour$, 13, 2))
+textback% = VAL(MID$(colour$, 15, 2))
+
+DIM field$(14)
+DIM oldfield$(14)
+m% = VAL(LEFT$(DATE$, 2))
+w% = 1
+y% = VAL(RIGHT$(DATE$, 4))
+
+CLS
+CALL promptdisplay("PgUp/PgDn to Step Through Weeks    Up/Down to Step Through Fields", 24, 15, 0, 1)
+CALL promptdisplay("Esc to End Data Entry", 25, 15, 0, 1)
+left% = 17
+top% = 3
+
+COLOR borderfore%, borderback%
+
+LOCATE top%, left%: PRINT CHR$(201); STRING$(30, 205); CHR$(209); STRING$(10, 205); CHR$(187);
+FOR i% = 1 TO 13
+        LOCATE top% + i%, left%: PRINT CHR$(186);
+        LOCATE top% + i%, left% + 31: PRINT CHR$(179);
+        LOCATE top% + i%, left% + 42: PRINT CHR$(186);
+NEXT
+LOCATE top% + 14, left%: PRINT CHR$(200); STRING$(30, 205); CHR$(207); STRING$(10, 205); CHR$(188);
+
+LOCATE top% + 15, 8: PRINT CHR$(201); STRING$(10, 205); CHR$(209); STRING$(52, 205); CHR$(187);
+LOCATE top% + 16, 8: PRINT CHR$(186);
+LOCATE top% + 16, 19: PRINT CHR$(179);
+LOCATE top% + 16, 72: PRINT CHR$(186);
+LOCATE top% + 17, 8: PRINT CHR$(200); STRING$(10, 205); CHR$(207); STRING$(52, 205); CHR$(188);
+
+COLOR textfore%, textback%
+RESTORE FieldEntryData2
+FOR i% = 1 TO 13
+        LOCATE top% + i%, left% + 2
+        READ f$: PRINT f$
+NEXT
+LOCATE 19, 10: PRINT "Comments"
+
+p$ = path$
+FOR i% = 5 TO 2 STEP -1
+        p$ = p$ + detail$(i%, 0) + "\"
+NEXT
+filename$ = p$ + detail$(1, 0) + ".db"
+
+p$ = path$
+FOR i% = 5 TO 2 STEP -1
+        p$ = p$ + detail$(i%, 0) + "\"
+NEXT
+unitfilename$ = LEFT$(p$, LEN(p$) - 1) + ".db"
+
+readrecord:
+
+CALL openfile(filename$, 1, "R", 148, retry%)
+IF retry% = 0 THEN GOTO bombout
+CALL getrandom(1, 2, rec%, retry%)
+IF retry% = 0 THEN GOTO bombout
+maxrec% = (LOF(1) / 148) - 12
+CLOSE #1
+record$ = agentweek.wholerecord
+
+FOR i% = 1 TO 13
+        field$(i%) = LTRIM$(RTRIM$(MID$(record$, (i% * 7) + 1, 7)))
+        oldfield$(i%) = field$(i%)
+        LOCATE top% + i%, left% + 33: PRINT SPACE$(8)
+        IF i% = 11 OR i% = 10 THEN
+                LOCATE top% + i%, left% + 40 - LEN(field$(i%))
+                IF field$(i%) <> "" THEN PRINT "" + field$(i%)
+        ELSE
+                LOCATE top% + i%, left% + 41 - LEN(field$(i%))
+                PRINT field$(i%)
+        END IF
+NEXT i%
+field$(14) = LTRIM$(RTRIM$(RIGHT$(record$, 50)))
+oldfield$(14) = field$(14)
+LOCATE 19, 21: PRINT SPACE$(50): LOCATE 19, 21: PRINT LTRIM$(RTRIM$(field$(14)))
+
+m$ = monthnum2str$(m%, 1)
+y$ = STR$(y% MOD 100)
+w$ = "Week" + STR$(w%)
+per$ = m$ + y$ + "  " + w$
+CALL promptdisplay(per$, 1, 15, 0, 1)
+LOCATE 1, 73: PRINT "ACTIVITY";
+
+inputdata:
+i% = 1
+DO
+IF i% < 14 THEN
+        CALL inputstr(7, top% + i%, left% + 34, field$(i%), "NUM", retvalue$, retkey$)
+ELSE
+        CALL inputstr(50, 19, 21, field$(i%), "COM", retvalue$, retkey$)
+END IF
+field$(i%) = retvalue$
+IF retkey$ = "del" THEN field$(i%) = ""
+IF i% < 14 THEN
+        LOCATE top% + i%, left% + 33: PRINT SPACE$(8)
+        IF i% <> 11 AND i% <> 10 THEN
+                LOCATE top% + i%, left% + 41 - LEN(field$(i%))
+                PRINT field$(i%)
+        ELSE
+                LOCATE top% + i%, left% + 40 - LEN(field$(i%))
+                IF field$(i%) <> "" THEN PRINT "" + field$(i%)
+        END IF
+ELSE
+        LOCATE 19, 21: PRINT SPACE$(50);
+        LOCATE 19, 21: PRINT field$(14)
+END IF
+
+IF retkey$ = "up" THEN i% = i% - 1: IF i% = 0 THEN i% = 14
+IF retkey$ = "down" OR retkey$ = "ret" THEN
+        i% = i% + 1
+        IF i% = 15 THEN
+                IF rec% = maxrec% OR retkey$ <> "ret" THEN
+                        i% = 1
+                ELSE
+                        retkey$ = "pgdn"
+                END IF
+        END IF
+END IF
+
+LOOP UNTIL retkey$ = "pgup" OR retkey$ = "pgdn" OR retkey$ = "esc"
+
+Change% = 0
+FOR a% = 1 TO 14
+        IF field$(a%) <> oldfield$(a%) THEN Change% = 1
+NEXT
+
+IF Change% = 1 THEN
+   
+        m$ = LTRIM$(RTRIM$(STR$(m%))): IF LEN(m$) = 1 THEN m$ = m$ + " "
+        record$ = LTRIM$(RTRIM$(STR$(y%))) + m$ + LTRIM$(RTRIM$(STR$(w%)))
+        FOR i% = 1 TO 13
+                record$ = record$ + field$(i%) + SPACE$(7 - LEN(field$(i%)))
+        NEXT
+        record$ = record$ + field$(14) + SPACE$(50 - LEN(field$(14)))
+  
+        toolong% = 0
+        CALL openfile(unitfilename$, 1, "R", 148, retry%)
+        IF retry% = 0 THEN GOTO bombout
+        unitmaxrec% = (LOF(1) / 148) - 12
+        CALL getrandom(1, 2, unitmaxrec% + m%, retry%)
+        IF retry% = 0 THEN GOTO bombout
+        FOR i% = 1 TO 13
+                answer$ = add$(MID$(agentweek.wholerecord, (7 * i%) - 6, 7), field$(i%))
+                IF LEN(answer$) > 7 THEN toolong% = 1
+        NEXT
+        CLOSE #1
+        IF toolong% = 1 THEN GOTO toolongbit
+   
+        CALL promptdisplay("Updating Database", 22, VAL(MID$(colour$, 25, 2)), VAL(MID$(colour$, 27, 2)), 1)
+        agentweek.wholerecord = record$
+        CALL openfile(filename$, 1, "R", 148, retry%)
+        IF retry% = 0 THEN GOTO bombout
+        CALL putrandom(1, 2, rec%, retry%)
+        IF retry% = 0 THEN GOTO bombout
+   
+        record$ = ""
+        CALL getrandom(1, 2, maxrec% + m%, retry%)
+        IF retry% = 0 THEN GOTO bombout
+        monthrec$ = agentweek.wholerecord
+        FOR i% = 1 TO 13
+                r$ = subtract$(MID$(monthrec$, (7 * i%) - 6, 7), oldfield$(i%))
+                answer$ = add$(r$, field$(i%))
+                IF field$(i%) = "" AND (LTRIM$(RTRIM$(MID$(monthrec$, (7 * i%) - 6, 7))) = "" OR LTRIM$(RTRIM$(MID$(monthrec$, (7 * i%) - 6, 7))) = oldfield$(i%)) THEN answer$ = ""
+                record$ = record$ + answer$ + SPACE$(7 - LEN(answer$))
+        NEXT
+        IF LTRIM$(RTRIM$(record$)) <> "" THEN
+                IF LTRIM$(RTRIM$(monthrec$)) = "" THEN addmonth% = 1
+        END IF
+        IF MID$(monthrec$, 92, 1) = "1" THEN gotmanmonth% = 1
+        IF addmonth% = 1 OR gotmanmonth% = 1 THEN mm$ = "1"
+        IF gotmanmonth% = 1 AND LTRIM$(RTRIM$(record$)) = "" THEN addmonth% = -1: mm$ = ""
+        agentweek.wholerecord = record$ + mm$ + SPACE$(148 - LEN(record$) - LEN(mm$))
+        CALL putrandom(1, 2, maxrec% + m%, retry%)
+        IF retry% = 0 THEN GOTO bombout
+        CLOSE #1
+   
+        CALL openfile(unitfilename$, 1, "R", 148, retry%)
+        IF retry% = 0 THEN GOTO bombout
+        offset% = maxrec% - rec%
+        weekrec% = unitmaxrec% - offset%
+        CALL getrandom(1, 2, weekrec%, retry%)
+        IF retry% = 0 THEN GOTO bombout
+        monthrec$ = agentweek.wholerecord
+        d$ = LEFT$(monthrec$, 7)
+        record$ = ""
+        FOR i% = 1 TO 13
+                r$ = subtract$(MID$(monthrec$, (7 * i%) + 1, 7), oldfield$(i%))
+                answer$ = add$(r$, field$(i%))
+                IF field$(i%) = "" AND (LTRIM$(RTRIM$(MID$(monthrec$, (7 * i%) + 1, 7))) = "" OR LTRIM$(RTRIM$(MID$(monthrec$, (7 * i%) + 1, 7))) = oldfield$(i%)) THEN answer$ = ""
+                record$ = record$ + answer$ + SPACE$(7 - LEN(answer$))
+        NEXT
+        agentweek.wholerecord = d$ + record$ + SPACE$(148 - LEN(record$) - 7)
+        CALL putrandom(1, 2, weekrec%, retry%)
+        IF retry% = 0 THEN GOTO bombout
+   
+        CALL getrandom(1, 2, unitmaxrec% + m%, retry%)
+        IF retry% = 0 THEN GOTO bombout
+        monthrec$ = agentweek.wholerecord
+        record$ = ""
+        FOR i% = 1 TO 13
+                r$ = subtract$(MID$(monthrec$, (7 * i%) - 6, 7), oldfield$(i%))
+                answer$ = add$(r$, field$(i%))
+                IF field$(i%) = "" AND (LTRIM$(RTRIM$(MID$(monthrec$, (7 * i%) - 6, 7))) = "" OR LTRIM$(RTRIM$(MID$(monthrec$, (7 * i%) - 6, 7))) = oldfield$(i%)) THEN answer$ = ""
+                record$ = record$ + answer$ + SPACE$(7 - LEN(answer$))
+        NEXT
+        IF addmonth% <> 0 THEN mm$ = add$(MID$(monthrec$, 92, 10), LTRIM$(RTRIM$(STR$(addmonth%)))) ELSE mm$ = LTRIM$(RTRIM$(MID$(monthrec$, 92, 10)))
+        IF mm$ = "0" THEN mm$ = ""
+        agentweek.wholerecord = record$ + mm$ + SPACE$(148 - LEN(record$) - LEN(mm$))
+        CALL putrandom(1, 2, unitmaxrec% + m%, retry%)
+        IF retry% = 0 THEN GOTO bombout
+        addmonth% = 0
+        CLOSE #1
+        CALL promptdisplay("", 22, 0, 0, 1)
+END IF
+
+toolongbit:
+IF toolong% = 1 THEN
+        RESTORE TooLarge
+        READ al$
+        CALL alertbox(15, 3, yn$)
+        GOTO inputdata
+END IF
+
+SELECT CASE retkey$
+
+CASE "pgdn"
+IF rec% < maxrec% THEN
+        rec% = rec% + 1
+        w% = w% + 1
+        IF w% = 6 THEN
+                w% = 1
+                m% = m% + 1
+                IF m% = 13 THEN
+                        m% = 1
+                        y% = y% + 1
+                END IF
+        END IF
+ELSEIF rec% >= maxrec% AND RIGHT$(filename$, 2) <> "db" THEN
+        rec% = 1
+        w% = w% + 1
+        IF w% = 6 THEN
+                w% = 1
+                m% = m% + 1
+                IF m% = 13 THEN
+                        m% = 1
+                        y% = y% + 1
+                END IF
+        END IF
+        filename$ = LEFT$(filename$, LEN(filename$) - 2) + LTRIM$(RTRIM$(STR$(y% MOD 100)))
+        unitfilename$ = LEFT$(unitfilename$, LEN(unitfilename$) - 2) + LTRIM$(RTRIM$(STR$(y% MOD 100)))
+        IF y% = curyear% THEN
+                filename$ = LEFT$(filename$, LEN(filename$) - 2) + "db"
+                unitfilename$ = LEFT$(unitfilename$, LEN(unitfilename$) - 2) + "db"
+        END IF
+ELSE
+        RESTORE CantGoForward
+        READ al$
+        CALL alertbox(15, 2, yn$)
+END IF
+
+CASE "pgup"
+IF rec% > 1 THEN
+        rec% = rec% - 1
+        w% = w% - 1
+        IF w% = 0 THEN
+                w% = 5
+                m% = m% - 1
+                IF m% = 0 THEN
+                        m% = 12
+                        y% = y% - 1
+                END IF
+        END IF
+ELSEIF rec% <= 1 THEN
+        filename$ = LEFT$(filename$, LEN(filename$) - 2) + LTRIM$(RTRIM$(STR$((y% - 1) MOD 100)))
+        unitfilename$ = LEFT$(unitfilename$, LEN(unitfilename$) - 2) + LTRIM$(RTRIM$(STR$((y% - 1) MOD 100)))
+        CALL openfile(filename$, 1, "R", 148, retry%)
+        IF retry% = 0 THEN GOTO bombout
+        l% = LOF(1) / 148
+        CLOSE #1
+        IF l% = 0 THEN
+                CALL killfile(filename$, retry%)
+                IF retry% = 0 THEN GOTO bombout
+                filename$ = LEFT$(filename$, LEN(filename$) - 2) + LTRIM$(RTRIM$(STR$(y% MOD 100)))
+                unitfilename$ = LEFT$(unitfilename$, LEN(unitfilename$) - 2) + LTRIM$(RTRIM$(STR$(y% MOD 100)))
+                IF y% = curyear% THEN
+                        filename$ = LEFT$(filename$, LEN(filename$) - 2) + "db"
+                        unitfilename$ = LEFT$(unitfilename$, LEN(unitfilename$) - 2) + "db"
+                END IF
+                RESTORE CantGoBack
+                READ al$
+                CALL alertbox(15, 2, yn$)
+        ELSE
+                rec% = l% - 12
+                w% = w% - 1
+                IF w% = 0 THEN
+                        w% = 5
+                        m% = m% - 1
+                        IF m% = 0 THEN
+                                m% = 12
+                                y% = y% - 1
+                        END IF
+                END IF
+        END IF
+END IF
+
+CASE "esc"
+CLS
+EXIT SUB
+
+END SELECT
+
+GOTO readrecord
+
+bombout:
+CLOSE
+RESTORE UnSuccessful
+CALL alertbox(15, 3, yn$)
+CLS
+
+END SUB
+
+SUB inputstr (length%, row%, startcol%, default$, type$, retvalue$, retkey$)
+
+hilitefore% = VAL(MID$(colour$, 21, 2))
+hiliteback% = VAL(MID$(colour$, 23, 2))
+textfore% = VAL(MID$(colour$, 33, 2))
+textback% = VAL(MID$(colour$, 35, 2))
+
+thiscol% = 1
+endcol% = LEN(default$) + 1
+lastcol% = length% + 1
+endkey% = 0
+retvalue$ = default$
+
+DO
+        COLOR hilitefore%, hiliteback%
+        LOCATE row%, startcol%
+        PRINT retvalue$; SPACE$(length% - LEN(retvalue$))
+        LOCATE row%, startcol% + thiscol% - 1, 1
+        newchar$ = ""
+     
+        DO
+                k$ = INKEY$
+        LOOP UNTIL k$ <> ""
+
+        IF ASC(k$) = 0 THEN
+                k% = ASC(MID$(k$, 2)) + 500
+        ELSE
+                k% = ASC(k$)
+        END IF
+
+        SELECT CASE k%
+             
+                CASE 575
+                IF thiscol% > 1 THEN thiscol% = thiscol% - 1
+
+                CASE 577
+                IF thiscol% < endcol% THEN thiscol% = thiscol% + 1
+
+                CASE 572
+                endkey% = 1
+                retkey$ = "up"
+             
+                CASE 580
+                endkey% = 1
+                retkey$ = "down"
+
+                CASE 573
+                endkey% = 1
+                retkey$ = "pgup"
+
+                CASE 581
+                endkey% = 1
+                retkey$ = "pgdn"
+
+                CASE 583
+                IF type$ = "STR" THEN
+                        IF thiscol% < endcol% THEN
+                                retvalue$ = LEFT$(retvalue$, thiscol% - 1) + MID$(retvalue$, thiscol% + 1)
+                                endcol% = endcol% - 1
+                        END IF
+                ELSE
+                        retvalue$ = ""
+                        thiscol% = 1
+                END IF
+
+                CASE 8
+                IF thiscol% > 1 THEN
+                        retvalue$ = LEFT$(retvalue$, thiscol% - 2) + MID$(retvalue$, thiscol%)
+                        thiscol% = thiscol% - 1
+                        endcol% = endcol% - 1
+                END IF
+
+                CASE 13
+                endkey% = 1
+                retkey$ = "ret"
+
+                CASE 27
+                endkey% = 1
+                retkey$ = "esc"
+
+                CASE 500 TO 800, 0 TO 31
+              
+                CASE ELSE
+                IF thiscol% < lastcol% THEN
+                        CALL checkvalid(k$, type$, newkey$)
+                END IF
+                IF newkey$ <> "" THEN
+                        retvalue$ = LEFT$(retvalue$, thiscol% - 1) + newkey$ + MID$(retvalue$, thiscol%)
+                        retvalue$ = LEFT$(retvalue$, length%)
+                        IF thiscol < lastcol% THEN thiscol% = thiscol% + 1
+                        IF endcol% < lastcol% THEN endcol% = endcol% + 1
+                END IF
+
+        END SELECT
+
+LOOP UNTIL endkey% > 0
+
+retvalue$ = LTRIM$(RTRIM$(retvalue$))
+COLOR textfore%, textback%
+LOCATE row%, startcol%
+PRINT retvalue$; SPACE$(length% - LEN(retvalue$))
+
+END SUB
+
+FUNCTION ratio$ (ratio1$, ratio2$, money%)
+
+ratio1 = VAL(ratio1$)
+ratio2 = VAL(ratio2$)
+IF ratio2 = 0 THEN ratio$ = "": EXIT FUNCTION
+r = ratio1 / ratio2
+IF money% = 1 AND CINT((r - INT(r)) * 100) >= 50 THEN r = r + 1
+r$ = LTRIM$(RTRIM$(STR$(INT(r))))
+IF RIGHT$(STR$(r), 1) = "5" THEN r = r + .0001
+IF money% = 0 THEN
+        IF CINT((r - INT(r)) * 100) < 10 THEN
+                r$ = r$ + ".0" + LTRIM$(RTRIM$(STR$(CINT((r - INT(r)) * 100))))
+        ELSE
+                r$ = r$ + "." + LTRIM$(RTRIM$(STR$(CINT((r - INT(r)) * 100))))
+        END IF
+END IF
+IF money% = 0 THEN
+        IF MID$(r$, LEN(r$) - 1, 1) = "." THEN r$ = r$ + "0"
+END IF
+IF money% = 0 THEN r$ = r$ + " : 1"
+IF money% = 0 THEN
+        IF LEN(r$) < 10 THEN r$ = SPACE$(10 - LEN(r$)) + r$
+ELSE
+        IF LEN(r$) < 9 THEN r$ = SPACE$(9 - LEN(r$)) + "" + r$
+END IF
+ratio$ = r$
+END FUNCTION
+
+FUNCTION reverseratio$ (ratio2$, r$, money%)
+
+ratio2 = VAL(ratio2$)
+r = VAL(r$)
+ratio1 = ratio2 * r
+IF money% = 1 AND CINT((ratio1 - INT(ratio1)) * 100) >= 50 THEN ratio1 = ratio1 + 1
+ratio1$ = LTRIM$(RTRIM$(STR$(INT(ratio1))))
+IF RIGHT$(STR$(ratio1), 1) = "5" THEN ratio1 = ratio1 + .0001
+IF money% = 0 THEN
+        IF CINT((ratio1 - INT(ratio1)) * 100) < 10 THEN
+                ratio1$ = ratio1$ + ".0" + LTRIM$(RTRIM$(STR$(CINT((ratio1 - INT(ratio1)) * 100))))
+        ELSE
+                ratio1$ = ratio1$ + "." + LTRIM$(RTRIM$(STR$(CINT((ratio1 - INT(ratio1)) * 100))))
+        END IF
+END IF
+IF money% = 0 THEN
+        IF MID$(ratio1$, LEN(ratio1$) - 1, 1) = "." THEN ratio1$ = ratio1$ + "0"
+ELSE
+        ratio1$ = "" + ratio1$
+END IF
+IF money% = 0 THEN ratio1$ = ratio1$ + " : 1"
+reverseratio$ = ratio1$
+
+END FUNCTION
+
+SUB targetprogress (filename$, weekstodate%, target$, weeks$, week1$, week2$, week3$, week4$, week5$, month$, f%, success%)
+
+curyear% = VAL(RIGHT$(DATE$, 4))
+curmonth% = VAL(LEFT$(DATE$, 2))
+DIM record$(5)
+record$(1) = week1$
+record$(2) = week2$
+record$(3) = week3$
+record$(4) = week4$
+record$(5) = week5$
+
+CALL setuptargetscreen(VAL(weeks$))
+
+m% = curmonth%
+y% = curyear%
+count% = 0
+DIM rec$(3)
+DO
+        count% = count% + 1
+        m% = m% - 1: IF m% < 1 THEN m% = 12: y% = y% - 1
+        IF y% = curyear% THEN file$ = filename$ + "db" ELSE file$ = filename$ + LTRIM$(RTRIM$(STR$(y% MOD 100)))
+        CALL openfile(file$, 2, "R", 148, retry%)
+        IF retry% = 0 THEN success% = 0: EXIT SUB
+        maxrec% = LOF(2) / 148
+        CALL getrandom(2, 2, maxrec% - 12 + m%, retry%)
+        IF retry% = 0 THEN success% = 0: CLOSE : EXIT SUB
+        rec$(count%) = agentweek.wholerecord
+        IF LTRIM$(RTRIM$(MID$(rec$(count%), 92, 10))) = "" THEN default% = 1
+        CLOSE #2
+LOOP UNTIL default% = 1 OR count% = 3
+
+IF default% = 0 THEN
+  
+        ans$ = add$(MID$(rec$(1), 64, 7), MID$(rec$(2), 64, 7))
+        totalcomm$ = add$(MID$(rec$(3), 64, 7), ans$)
+        ans$ = add$(MID$(rec$(1), 50, 7), MID$(rec$(2), 50, 7))
+        totalsales$ = add$(MID$(rec$(3), 50, 7), ans$)
+        ans$ = add$(MID$(rec$(1), 29, 7), MID$(rec$(2), 29, 7))
+        appt2s$ = add$(MID$(rec$(3), 29, 7), ans$)
+        ans$ = add$(MID$(rec$(1), 36, 7), MID$(rec$(2), 36, 7))
+        FPAs$ = add$(MID$(rec$(3), 36, 7), ans$)
+        ans$ = add$(MID$(rec$(1), 22, 7), MID$(rec$(2), 22, 7))
+        appt1s$ = add$(MID$(rec$(3), 22, 7), ans$)
+        ans$ = add$(MID$(rec$(1), 1, 7), MID$(rec$(2), 1, 7))
+        apprs$ = add$(MID$(rec$(3), 1, 7), ans$)
+
+        IF totalcomm$ = "" OR totalsales$ = "" OR appt2s$ = "" OR FPAs$ = "" OR appt1s$ = "" OR apprs$ = "" THEN default% = 1
+
+END IF
+
+IF default% = 0 THEN
+
+        r$ = ratio$(totalcomm$, totalsales$, 0)
+        avesalesize$ = LTRIM$(LEFT$(r$, LEN(r$) - 4))
+        r$ = ratio$(totalsales$, appt2s$, 0)
+        salesappt2s$ = LTRIM$(LEFT$(r$, LEN(r$) - 4))
+        r$ = ratio$(appt2s$, FPAs$, 0)
+        appt2sFPAs$ = LTRIM$(LEFT$(r$, LEN(r$) - 4))
+        r$ = ratio$(FPAs$, appt1s$, 0)
+        FPAsappt1s$ = LTRIM$(LEFT$(r$, LEN(r$) - 4))
+        r$ = ratio$(appt1s$, apprs$, 0)
+        appt1sapprs$ = LTRIM$(LEFT$(r$, LEN(r$) - 4))
+
+ELSE
+
+        CALL readdefaults(a$, b$, c$, d$, e$, success%)
+   
+        totalcomm$ = LTRIM$(RTRIM$(MID$(a$, 1, INSTR(a$, ":") - 1)))
+        totalsales$ = LTRIM$(RTRIM$(MID$(a$, INSTR(a$, ":") + 1, LEN(a$) - INSTR(a$, ":"))))
+        r$ = ratio$(totalcomm$, totalsales$, 0)
+        avesalesize$ = LTRIM$(LEFT$(r$, LEN(r$) - 4))
+   
+        totalsales$ = LTRIM$(RTRIM$(MID$(b$, 1, INSTR(b$, ":") - 1)))
+        appt2s$ = LTRIM$(RTRIM$(MID$(b$, INSTR(b$, ":") + 1, LEN(b$) - INSTR(b$, ":"))))
+        r$ = ratio$(totalsales$, appt2s$, 0)
+        salesappt2s$ = LTRIM$(LEFT$(r$, LEN(r$) - 4))
+   
+        appt2s$ = LTRIM$(RTRIM$(MID$(c$, 1, INSTR(c$, ":") - 1)))
+        FPAs$ = LTRIM$(RTRIM$(MID$(c$, INSTR(c$, ":") + 1, LEN(c$) - INSTR(c$, ":"))))
+        r$ = ratio$(appt2s$, FPAs$, 0)
+        appt2sFPAs$ = LTRIM$(LEFT$(r$, LEN(r$) - 4))
+   
+        FPAs$ = LTRIM$(RTRIM$(MID$(d$, 1, INSTR(d$, ":") - 1)))
+        appt1s$ = LTRIM$(RTRIM$(MID$(d$, INSTR(d$, ":") + 1, LEN(d$) - INSTR(d$, ":"))))
+        r$ = ratio$(FPAs$, appt1s$, 0)
+        FPAsappt1s$ = LTRIM$(LEFT$(r$, LEN(r$) - 4))
+   
+        appt1s$ = LTRIM$(RTRIM$(MID$(e$, 1, INSTR(e$, ":") - 1)))
+        apprs$ = LTRIM$(RTRIM$(MID$(e$, INSTR(e$, ":") + 1, LEN(e$) - INSTR(e$, ":"))))
+        r$ = ratio$(appt1s$, apprs$, 0)
+        appt1sapprs$ = LTRIM$(LEFT$(r$, LEN(r$) - 4))
+
+END IF
+   
+        SELECT CASE f%
+        CASE 1
+                targetcomm$ = target$ + ".00"
+                GOSUB SalesFromComm2
+                GOSUB Appt2sFromSales2
+                GOSUB FPAsFromAppt2s2
+                GOSUB Appt1sFromFPAs2
+                GOSUB ApprsFromAppt1s2
+        CASE 2
+                targetsales$ = target$ + ".00"
+                GOSUB CommFromSales2
+                GOSUB Appt2sFromSales2
+                GOSUB FPAsFromAppt2s2
+                GOSUB Appt1sFromFPAs2
+                GOSUB ApprsFromAppt1s2
+        CASE 3
+                targetappt2s$ = target$ + ".00"
+                GOSUB SalesFromAppt2s2
+                GOSUB CommFromSales2
+                GOSUB FPAsFromAppt2s2
+                GOSUB Appt1sFromFPAs2
+                GOSUB ApprsFromAppt1s2
+        CASE 4
+                targetFPAs$ = target$ + ".00"
+                GOSUB Appt2sFromFPAs2
+                GOSUB SalesFromAppt2s2
+                GOSUB CommFromSales2
+                GOSUB Appt1sFromFPAs2
+                GOSUB ApprsFromAppt1s2
+        CASE 5
+                targetappt1s$ = target$ + ".00"
+                GOSUB FPAsFromAppt1s2
+                GOSUB Appt2sFromFPAs2
+                GOSUB SalesFromAppt2s2
+                GOSUB CommFromSales2
+                GOSUB ApprsFromAppt1s2
+        CASE 6
+                targetapprs$ = target$ + ".00"
+                GOSUB Appt1sFromApprs2
+                GOSUB FPAsFromAppt1s2
+                GOSUB Appt2sFromFPAs2
+                GOSUB SalesFromAppt2s2
+                GOSUB CommFromSales2
+        END SELECT
+  
+        IF VAL(RIGHT$(targetcomm$, 2)) > 49 THEN
+                targetcomm$ = LTRIM$(STR$(VAL(LEFT$(targetcomm$, LEN(targetcomm$) - 3)) + 1))
+        ELSE
+                targetcomm$ = LEFT$(targetcomm$, LEN(targetcomm$) - 3)
+        END IF
+        IF VAL(RIGHT$(targetsales$, 2)) > 49 THEN
+                targetsales$ = LTRIM$(STR$(VAL(LEFT$(targetsales$, LEN(targetsales$) - 3)) + 1))
+        ELSE
+                targetsales$ = LEFT$(targetsales$, LEN(targetsales$) - 3)
+        END IF
+        IF VAL(RIGHT$(targetappt2s$, 2)) > 49 THEN
+                targetappt2s$ = LTRIM$(STR$(VAL(LEFT$(targetappt2s$, LEN(targetappt2s$) - 3)) + 1))
+        ELSE
+                targetappt2s$ = LEFT$(targetappt2s$, LEN(targetappt2s$) - 3)
+        END IF
+        IF VAL(RIGHT$(targetFPAs$, 2)) > 49 THEN
+                targetFPAs$ = LTRIM$(STR$(VAL(LEFT$(targetFPAs$, LEN(targetFPAs$) - 3)) + 1))
+        ELSE
+                targetFPAs$ = LEFT$(targetFPAs$, LEN(targetFPAs$) - 3)
+        END IF
+        IF VAL(RIGHT$(targetappt1s$, 2)) > 49 THEN
+                targetappt1s$ = LTRIM$(STR$(VAL(LEFT$(targetappt1s$, LEN(targetappt1s$) - 3)) + 1))
+        ELSE
+                targetappt1s$ = LEFT$(targetappt1s$, LEN(targetappt1s$) - 3)
+        END IF
+        IF VAL(RIGHT$(targetapprs$, 2)) > 49 THEN
+                targetapprs$ = LTRIM$(STR$(VAL(LEFT$(targetapprs$, LEN(targetapprs$) - 3)) + 1))
+        ELSE
+                targetapprs$ = LEFT$(targetapprs$, LEN(targetapprs$) - 3)
+        END IF
+
+        r$ = ratio$(LTRIM$(RTRIM$(MID$(month$, 64, 7))), targetcomm$, 0)
+        r$ = LTRIM$(RTRIM$(r$))
+        IF r$ <> "" THEN r$ = LEFT$(r$, INSTR(r$, ".") - 1) + MID$(r$, INSTR(r$, ".") + 1, 2)
+        IF LEFT$(r$, 1) = "0" THEN r$ = RIGHT$(r$, 2)
+        IF LEFT$(r$, 1) = "0" THEN r$ = RIGHT$(r$, 1)
+        r$ = SPACE$(3 - LEN(r$)) + r$ + "%"
+        CALL putscreenarray(r$, 6, 76, 3)
+    
+        r$ = ratio$(LTRIM$(RTRIM$(MID$(month$, 50, 7))), targetsales$, 0)
+        r$ = LTRIM$(RTRIM$(r$))
+        IF r$ <> "" THEN r$ = LEFT$(r$, INSTR(r$, ".") - 1) + MID$(r$, INSTR(r$, ".") + 1, 2)
+        IF LEFT$(r$, 1) = "0" THEN r$ = RIGHT$(r$, 2)
+        IF LEFT$(r$, 1) = "0" THEN r$ = RIGHT$(r$, 1)
+        r$ = SPACE$(3 - LEN(r$)) + r$ + "%"
+        CALL putscreenarray(r$, 9, 76, 3)
+    
+        r$ = ratio$(LTRIM$(RTRIM$(MID$(month$, 29, 7))), targetappt2s$, 0)
+        r$ = LTRIM$(RTRIM$(r$))
+        IF r$ <> "" THEN r$ = LEFT$(r$, INSTR(r$, ".") - 1) + MID$(r$, INSTR(r$, ".") + 1, 2)
+        IF LEFT$(r$, 1) = "0" THEN r$ = RIGHT$(r$, 2)
+        IF LEFT$(r$, 1) = "0" THEN r$ = RIGHT$(r$, 1)
+        r$ = SPACE$(3 - LEN(r$)) + r$ + "%"
+        CALL putscreenarray(r$, 12, 76, 3)
+    
+        r$ = ratio$(LTRIM$(RTRIM$(MID$(month$, 36, 7))), targetFPAs$, 0)
+        r$ = LTRIM$(RTRIM$(r$))
+        IF r$ <> "" THEN r$ = LEFT$(r$, INSTR(r$, ".") - 1) + MID$(r$, INSTR(r$, ".") + 1, 2)
+        IF LEFT$(r$, 1) = "0" THEN r$ = RIGHT$(r$, 2)
+        IF LEFT$(r$, 1) = "0" THEN r$ = RIGHT$(r$, 1)
+        r$ = SPACE$(3 - LEN(r$)) + r$ + "%"
+        CALL putscreenarray(r$, 15, 76, 3)
+    
+        r$ = ratio$(LTRIM$(RTRIM$(MID$(month$, 22, 7))), targetappt1s$, 0)
+        r$ = LTRIM$(RTRIM$(r$))
+        IF r$ <> "" THEN r$ = LEFT$(r$, INSTR(r$, ".") - 1) + MID$(r$, INSTR(r$, ".") + 1, 2)
+        IF LEFT$(r$, 1) = "0" THEN r$ = RIGHT$(r$, 2)
+        IF LEFT$(r$, 1) = "0" THEN r$ = RIGHT$(r$, 1)
+        r$ = SPACE$(3 - LEN(r$)) + r$ + "%"
+        CALL putscreenarray(r$, 18, 76, 3)
+    
+        r$ = ratio$(LTRIM$(RTRIM$(MID$(month$, 1, 7))), targetapprs$, 0)
+        r$ = LTRIM$(RTRIM$(r$))
+        IF r$ <> "" THEN r$ = LEFT$(r$, INSTR(r$, ".") - 1) + MID$(r$, INSTR(r$, ".") + 1, 2)
+        IF LEFT$(r$, 1) = "0" THEN r$ = RIGHT$(r$, 2)
+        IF LEFT$(r$, 1) = "0" THEN r$ = RIGHT$(r$, 1)
+        r$ = SPACE$(3 - LEN(r$)) + r$ + "%"
+        CALL putscreenarray(r$, 21, 76, 3)
+
+        done% = 0
+        col% = 20
+        FOR i% = 1 TO VAL(weeks$)
+                IF LTRIM$(RTRIM$(MID$(record$(i%), 71, 7))) <> "" THEN CALL putscreenarray(LTRIM$(STR$(i%)), 6, col%, 3): col% = col% + 1
+                r$ = ratio$(LTRIM$(RTRIM$(MID$(record$(i%), 71, 7))), targetcomm$, 0)
+                r$ = LTRIM$(RTRIM$(r$))
+                IF r$ <> "" THEN r$ = MID$(r$, INSTR(r$, ".") + 1, 2)
+                IF r$ = "00" THEN r$ = "0"
+                IF VAL(MID$(record$(i%), 71, 7)) >= VAL(targetcomm$) THEN r$ = "200"
+                IF VAL(targetcomm$) = 0 OR VAL(LTRIM$(RTRIM$(MID$(record$(i%), 71, 7)))) = 0 THEN r$ = "0"
+                IF LTRIM$(RTRIM$(MID$(record$(i%), 71, 7))) <> "" THEN z% = VAL(r$) / 2 - 1 ELSE z% = VAL(r$) / 2
+                FOR j% = 1 TO z%
+                        CALL putscreenarray(CHR$(178), 6, col%, 3)
+                        col% = col% + 1
+                        IF col% >= 70 THEN done% = 1: EXIT FOR
+                NEXT
+        IF done% = 1 THEN EXIT FOR
+        NEXT
+    
+        done% = 0
+        col% = 20
+        FOR i% = 1 TO VAL(weeks$)
+                IF LTRIM$(RTRIM$(MID$(record$(i%), 57, 7))) <> "" THEN CALL putscreenarray(LTRIM$(STR$(i%)), 9, col%, 3): col% = col% + 1
+                r$ = ratio$(LTRIM$(RTRIM$(MID$(record$(i%), 57, 7))), targetsales$, 0)
+                r$ = LTRIM$(RTRIM$(r$))
+                IF r$ <> "" THEN r$ = MID$(r$, INSTR(r$, ".") + 1, 2)
+                IF r$ = "00" THEN r$ = "0"
+                IF VAL(MID$(record$(i%), 57, 7)) >= VAL(targetsales$) THEN r$ = "200"
+                IF VAL(targetsales$) = 0 OR VAL(LTRIM$(RTRIM$(MID$(record$(i%), 57, 7)))) = 0 THEN r$ = "0"
+                IF LTRIM$(RTRIM$(MID$(record$(i%), 57, 7))) <> "" THEN z% = VAL(r$) / 2 - 1 ELSE z% = VAL(r$) / 2
+                FOR j% = 1 TO z%
+                        CALL putscreenarray(CHR$(178), 9, col%, 3)
+                        col% = col% + 1
+                        IF col% >= 70 THEN done% = 1: EXIT FOR
+                NEXT
+        IF done% = 1 THEN EXIT FOR
+        NEXT
+    
+        done% = 0
+        col% = 20
+        FOR i% = 1 TO VAL(weeks$)
+                IF LTRIM$(RTRIM$(MID$(record$(i%), 36, 7))) <> "" THEN CALL putscreenarray(LTRIM$(STR$(i%)), 12, col%, 3): col% = col% + 1
+                r$ = ratio$(LTRIM$(RTRIM$(MID$(record$(i%), 36, 7))), targetappt2s$, 0)
+                r$ = LTRIM$(RTRIM$(r$))
+                IF r$ <> "" THEN r$ = MID$(r$, INSTR(r$, ".") + 1, 2)
+                IF r$ = "00" THEN r$ = "0"
+                IF VAL(MID$(record$(i%), 36, 7)) >= VAL(targetappt2s$) THEN r$ = "200"
+                IF VAL(targetappt2s$) = 0 OR VAL(LTRIM$(RTRIM$(MID$(record$(i%), 36, 7)))) = 0 THEN r$ = "0"
+                IF LTRIM$(RTRIM$(MID$(record$(i%), 36, 7))) <> "" THEN z% = VAL(r$) / 2 - 1 ELSE z% = VAL(r$) / 2
+                FOR j% = 1 TO z%
+                        CALL putscreenarray(CHR$(178), 12, col%, 3)
+                        col% = col% + 1
+                        IF col% >= 70 THEN done% = 1: EXIT FOR
+                NEXT
+        IF done% = 1 THEN EXIT FOR
+        NEXT
+    
+        done% = 0
+        col% = 20
+        FOR i% = 1 TO VAL(weeks$)
+                IF LTRIM$(RTRIM$(MID$(record$(i%), 43, 7))) <> "" THEN CALL putscreenarray(LTRIM$(STR$(i%)), 15, col%, 3): col% = col% + 1
+                r$ = ratio$(LTRIM$(RTRIM$(MID$(record$(i%), 43, 7))), targetFPAs$, 0)
+                r$ = LTRIM$(RTRIM$(r$))
+                IF r$ <> "" THEN r$ = MID$(r$, INSTR(r$, ".") + 1, 2)
+                IF r$ = "00" THEN r$ = "0"
+                IF VAL(MID$(record$(i%), 43, 7)) >= VAL(targetFPAs$) THEN r$ = "200"
+                IF VAL(targetFPAs$) = 0 OR VAL(LTRIM$(RTRIM$(MID$(record$(i%), 43, 7)))) = 0 THEN r$ = "0"
+                IF LTRIM$(RTRIM$(MID$(record$(i%), 43, 7))) <> "" THEN z% = VAL(r$) / 2 - 1 ELSE z% = VAL(r$) / 2
+                FOR j% = 1 TO z%
+                        CALL putscreenarray(CHR$(178), 15, col%, 3)
+                        col% = col% + 1
+                        IF col% >= 70 THEN done% = 1: EXIT FOR
+                NEXT
+        IF done% = 1 THEN EXIT FOR
+        NEXT
+    
+        done% = 0
+        col% = 20
+        FOR i% = 1 TO VAL(weeks$)
+                IF LTRIM$(RTRIM$(MID$(record$(i%), 29, 7))) <> "" THEN CALL putscreenarray(LTRIM$(STR$(i%)), 18, col%, 3): col% = col% + 1
+                r$ = ratio$(LTRIM$(RTRIM$(MID$(record$(i%), 29, 7))), targetappt1s$, 0)
+                r$ = LTRIM$(RTRIM$(r$))
+                IF r$ <> "" THEN r$ = MID$(r$, INSTR(r$, ".") + 1, 2)
+                IF r$ = "00" THEN r$ = "0"
+                IF VAL(MID$(record$(i%), 29, 7)) >= VAL(targetappt1s$) THEN r$ = "200"
+                IF VAL(targetappt1s$) = 0 OR VAL(LTRIM$(RTRIM$(MID$(record$(i%), 29, 7)))) = 0 THEN r$ = "0"
+                IF LTRIM$(RTRIM$(MID$(record$(i%), 29, 7))) <> "" THEN z% = VAL(r$) / 2 - 1 ELSE z% = VAL(r$) / 2
+                FOR j% = 1 TO z%
+                        CALL putscreenarray(CHR$(178), 18, col%, 3)
+                        col% = col% + 1
+                        IF col% >= 70 THEN done% = 1: EXIT FOR
+                NEXT
+        IF done% = 1 THEN EXIT FOR
+        NEXT
+    
+        done% = 0
+        col% = 20
+        FOR i% = 1 TO VAL(weeks$)
+                IF LTRIM$(RTRIM$(MID$(record$(i%), 8, 7))) <> "" THEN CALL putscreenarray(LTRIM$(STR$(i%)), 21, col%, 3): col% = col% + 1
+                r$ = ratio$(LTRIM$(RTRIM$(MID$(record$(i%), 8, 7))), targetapprs$, 0)
+                r$ = LTRIM$(RTRIM$(r$))
+                IF r$ <> "" THEN r$ = MID$(r$, INSTR(r$, ".") + 1, 2)
+                IF r$ = "00" THEN r$ = "0"
+                IF VAL(MID$(record$(i%), 8, 7)) >= VAL(targetapprs$) THEN r$ = "200"
+                IF VAL(targetapprs$) = 0 OR VAL(LTRIM$(RTRIM$(MID$(record$(i%), 8, 7)))) = 0 THEN r$ = "0"
+                IF LTRIM$(RTRIM$(MID$(record$(i%), 8, 7))) <> "" THEN z% = VAL(r$) / 2 - 1 ELSE z% = VAL(r$) / 2
+                FOR j% = 1 TO z%
+                        CALL putscreenarray(CHR$(178), 21, col%, 3)
+                        col% = col% + 1
+                        IF col% >= 70 THEN done% = 1: EXIT FOR
+                NEXT
+        IF done% = 1 THEN EXIT FOR
+        NEXT
+
+EXIT SUB
+
+SalesFromComm2:
+        targetsales$ = ratio$(targetcomm$, avesalesize$, 0)
+        targetsales$ = LTRIM$(RTRIM$(targetsales$))
+        targetsales$ = LEFT$(targetsales$, LEN(targetsales$) - 4)
+RETURN
+
+Appt2sFromSales2:
+        targetappt2s$ = ratio$(targetsales$, salesappt2s$, 0)
+        targetappt2s$ = LTRIM$(RTRIM$(targetappt2s$))
+        targetappt2s$ = LEFT$(targetappt2s$, LEN(targetappt2s$) - 4)
+RETURN
+
+FPAsFromAppt2s2:
+        targetFPAs$ = ratio$(targetappt2s$, appt2sFPAs$, 0)
+        targetFPAs$ = LTRIM$(RTRIM$(targetFPAs$))
+        targetFPAs$ = LEFT$(targetFPAs$, LEN(targetFPAs$) - 4)
+RETURN
+
+Appt1sFromFPAs2:
+        targetappt1s$ = ratio$(targetFPAs$, FPAsappt1s$, 0)
+        targetappt1s$ = LTRIM$(RTRIM$(targetappt1s$))
+        targetappt1s$ = LEFT$(targetappt1s$, LEN(targetappt1s$) - 4)
+RETURN
+
+ApprsFromAppt1s2:
+        targetapprs$ = ratio$(targetappt1s$, appt1sapprs$, 0)
+        targetapprs$ = LTRIM$(RTRIM$(targetapprs$))
+        targetapprs$ = LEFT$(targetapprs$, LEN(targetapprs$) - 4)
+RETURN
+
+'Now the reverse ratio routines
+
+CommFromSales2:
+        targetcomm$ = reverseratio$(avesalesize$, targetsales$, 0)
+        targetcomm$ = LTRIM$(RTRIM$(targetcomm$))
+        targetcomm$ = LEFT$(targetcomm$, LEN(targetcomm$) - 4)
+RETURN
+
+SalesFromAppt2s2:
+        targetsales$ = reverseratio$(salesappt2s$, targetappt2s$, 0)
+        targetsales$ = LTRIM$(RTRIM$(targetsales$))
+        targetsales$ = LEFT$(targetsales$, LEN(targetsales$) - 4)
+RETURN
+
+Appt2sFromFPAs2:
+        targetappt2s$ = reverseratio$(appt2sFPAs$, targetFPAs$, 0)
+        targetappt2s$ = LTRIM$(RTRIM$(targetappt2s$))
+        targetappt2s$ = LEFT$(targetappt2s$, LEN(targetappt2s$) - 4)
+RETURN
+
+FPAsFromAppt1s2:
+        targetFPAs$ = reverseratio$(FPAsappt1s$, targetappt1s$, 0)
+        targetFPAs$ = LTRIM$(RTRIM$(targetFPAs$))
+        targetFPAs$ = LEFT$(targetFPAs$, LEN(targetFPAs$) - 4)
+RETURN
+
+Appt1sFromApprs2:
+        targetappt1s$ = reverseratio$(appt1sapprs$, targetapprs$, 0)
+        targetappt1s$ = LTRIM$(RTRIM$(targetappt1s$))
+        targetappt1s$ = LEFT$(targetappt1s$, LEN(targetappt1s$) - 4)
+RETURN
+
+END SUB
+
+SUB targetset
+
+p$ = path$
+IF detail$(1, 0) = "" THEN
+        RESTORE TargetAdviser
+        READ al$
+        CALL alertbox(15, 2, y$)
+        EXIT SUB
+END IF
+CLS
+
+FOR i% = 5 TO 1 STEP -1
+        p$ = p$ + detail$(i%, 0) + "\"
+NEXT
+target$ = "": weeks$ = ""
+filename$ = LEFT$(p$, LEN(p$) - 1) + "."
+curyear% = VAL(RIGHT$(DATE$, 4))
+curmonth% = VAL(LEFT$(DATE$, 2))
+y% = curyear%
+m% = curmonth% + 1
+CALL displaysublevels(0, levelpath1$, levelpath2$)
+levelpath2$ = LEFT$(levelpath2$, INSTR(levelpath2$, "Team") + 3)
+
+m$ = monthnum2str$((curmonth% + 1) MOD 12, 0)
+y$ = LTRIM$(RTRIM$(STR$(curyear% MOD 100)))
+
+CALL promptdisplay("Target Planning for " + m$ + " " + y$, 1, 15, 0, 1)
+LOCATE 1, 73: PRINT "ACTIVITY";
+
+left% = 13
+LOCATE 2, left%: PRINT CHR$(201); STRING$(43, 205); CHR$(209); STRING$(12, 205); CHR$(187);
+FOR i% = 1 TO 2
+        LOCATE 2 + i%, left%: PRINT CHR$(186);
+        LOCATE 2 + i%, left% + 44: PRINT CHR$(179);
+        LOCATE 2 + i%, left% + 57: PRINT CHR$(186);
+NEXT
+LOCATE 5, left%: PRINT CHR$(200); STRING$(43, 205); CHR$(207); STRING$(12, 205); CHR$(188);
+
+LOCATE 3, 15: PRINT "My"
+LOCATE 4, 15: PRINT "My Number of Working Weeks this Month is"
+top$ = "ษอออออออออออออออออออออออออออออออออออออออป"
+midd$ = "บ                                       บ"
+bot$ = "ศอออออออออออออออออออออออออออออออออออออออผ"
+midline$ = "วฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤถ"
+left% = (80 - LEN(top$)) / 2 + 1
+
+LOCATE 6, left%: PRINT top$
+FOR i% = 7 TO 14
+        LOCATE i%, left%: PRINT midd$
+NEXT
+LOCATE 15, left%: PRINT midline$
+FOR i% = 16 TO 23
+        LOCATE i%, left%: PRINT midd$
+NEXT
+LOCATE 24, left%: PRINT bot$;
+CALL promptdisplay("Esc to Return to Main Menu", 25, 15, 0, 1)
+
+LOCATE 7, left% + 2: PRINT "This Month I Will Achieve"
+LOCATE 9, left% + 2: PRINT "Number of Approaches       :"
+LOCATE 10, left% + 2: PRINT "Number of 1st Appointments :"
+LOCATE 11, left% + 2: PRINT "Number of FPAs             :"
+LOCATE 12, left% + 2: PRINT "Number of 2nd Appointments :"
+LOCATE 13, left% + 2: PRINT "Number of Sales            :"
+LOCATE 14, left% + 2: PRINT "Commission Credit          :"
+LOCATE 16, left% + 2: PRINT "Each Working Week I Will Achieve"
+LOCATE 18, left% + 2: PRINT "Number of Approaches       :"
+LOCATE 19, left% + 2: PRINT "Number of 1st Appointments :"
+LOCATE 20, left% + 2: PRINT "Number of FPAs             :"
+LOCATE 21, left% + 2: PRINT "Number of 2nd Appointments :"
+LOCATE 22, left% + 2: PRINT "Number of Sales            :"
+LOCATE 23, left% + 2: PRINT "Commission Credit          :"
+
+DIM rec$(3)
+DIM f$(6)
+f$(1) = "Commission"
+f$(2) = "Sales"
+f$(3) = "2nd Appts"
+f$(4) = "FPAs"
+f$(5) = "1st Appts"
+f$(6) = "Approaches"
+
+retarget:
+
+m% = curmonth%
+CALL openfile(filename$ + "db", 1, "R", 148, retry%)
+IF retry% = 0 THEN GOTO bombout6
+maxrec% = LOF(1) / 148
+CALL getrandom(1, 2, maxrec% - 12 + m%, retry%)
+IF retry% = 0 THEN GOTO bombout6
+record$ = agentweek.wholerecord
+CLOSE #1
+target$ = LTRIM$(RTRIM$(MID$(record$, 102, 8)))
+weeks$ = LTRIM$(MID$(record$, 110, 1))
+f% = VAL(LTRIM$(MID$(record$, 111, 1)))
+IF f% = 0 THEN f% = 1
+
+gettargetfield:
+DO
+LOCATE 3, 18: PRINT SPACE$(31)
+COLOR 0, 15
+LOCATE 3, 18: PRINT f$(f%);
+COLOR 15, 0
+PRINT " Target this Month is"
+DO
+        k$ = INKEY$
+LOOP UNTIL k$ <> ""
+IF ASC(k$) = 32 THEN
+        f% = f% + 1: IF f% > 6 THEN f% = 1
+END IF
+LOOP UNTIL ASC(k$) = 13 OR ASC(k$) = 27
+LOCATE 3, 18: PRINT f$(f%) + " Target this Month is"
+IF ASC(k$) = 27 THEN CLS : EXIT SUB
+
+targetcomm:
+DO
+        LOCATE 3, 58: PRINT SPACE$(9);
+        CALL inputstr(8, 3, 59, target$, "NUM", target$, retkey$)
+LOOP UNTIL retkey$ = "ret" OR retkey$ = "esc" OR retkey$ = "down"
+IF retkey$ = "esc" THEN GOTO gettargetfield
+DO
+        IF LEFT$(target$, 1) = "0" THEN target$ = RIGHT$(target$, LEN(target$) - 1)
+LOOP UNTIL target$ = "" OR LEFT$(target$, 1) <> "0"
+IF f% = 1 THEN LOCATE 3, 58: PRINT "";
+LOCATE 3, 59: PRINT SPACE$(9);
+LOCATE 3, 59: PRINT target$;
+IF LTRIM$(RTRIM$(target$)) = "" THEN GOTO targetcomm
+TargetWeeks:
+DO
+        CALL inputstr(1, 4, 59, weeks$, "NUM", weeks$, retkey$)
+LOOP UNTIL retkey$ = "esc" OR retkey$ = "up" OR retkey$ = "ret"
+IF retkey$ = "up" THEN GOTO targetcomm
+IF retkey$ = "esc" THEN GOTO gettargetfield
+IF NOT (VAL(weeks$) > 0 AND VAL(weeks$) < 6) THEN GOTO TargetWeeks
+
+
+CALL openfile(filename$ + "db", 1, "R", 148, retry%)
+IF retry% = 0 THEN GOTO bombout6
+maxrec% = LOF(1) / 148
+CALL getrandom(1, 2, maxrec% - 12 + m%, retry%)
+IF retry% = 0 THEN GOTO bombout6
+record$ = agentweek.wholerecord
+record$ = LEFT$(record$, 101) + SPACE$(8 - LEN(target$)) + target$ + weeks$ + LTRIM$(STR$(f%))
+record$ = record$ + SPACE$(148 - LEN(record$))
+agentweek.wholerecord = record$
+CALL putrandom(1, 2, maxrec% - 12 + m%, retry%)
+IF retry% = 0 THEN GOTO bombout6
+CLOSE #1
+count% = 0
+DO
+count% = count% + 1
+m% = m% - 1: IF m% < 1 THEN m% = 12: y% = y% - 1
+IF y% = curyear% THEN file$ = filename$ + "db" ELSE file$ = filename$ + LTRIM$(RTRIM$(STR$(y% MOD 100)))
+CALL openfile(file$, 1, "R", 148, retry%)
+IF retry% = 0 THEN GOTO bombout6
+maxrec% = LOF(1) / 148
+CALL getrandom(1, 2, maxrec% - 12 + m%, retry%)
+IF retry% = 0 THEN GOTO bombout6
+rec$(count%) = agentweek.wholerecord
+IF LTRIM$(RTRIM$(MID$(rec$(count%), 92, 10))) = "" THEN default% = 1
+CLOSE #1
+LOOP UNTIL default% = 1 OR count% = 3
+
+IF default% = 0 THEN
+        RESTORE UseDefaults
+        READ al$
+        CALL alertbox(15, 1, yn$)
+END IF
+
+IF default% = 0 AND yn$ <> "y" THEN
+
+        IF yn$ = "esc" THEN
+                LOCATE 3, 58: PRINT SPACE$(9)
+                LOCATE 4, 59: PRINT " "
+                GOTO retarget
+        END IF
+
+        IF yn$ = "n" THEN
+   
+        ans$ = add$(MID$(rec$(1), 64, 7), MID$(rec$(2), 64, 7))
+        totalcomm$ = add$(MID$(rec$(3), 64, 7), ans$)
+        ans$ = add$(MID$(rec$(1), 50, 7), MID$(rec$(2), 50, 7))
+        totalsales$ = add$(MID$(rec$(3), 50, 7), ans$)
+        ans$ = add$(MID$(rec$(1), 29, 7), MID$(rec$(2), 29, 7))
+        appt2s$ = add$(MID$(rec$(3), 29, 7), ans$)
+        ans$ = add$(MID$(rec$(1), 36, 7), MID$(rec$(2), 36, 7))
+        FPAs$ = add$(MID$(rec$(3), 36, 7), ans$)
+        ans$ = add$(MID$(rec$(1), 22, 7), MID$(rec$(2), 22, 7))
+        appt1s$ = add$(MID$(rec$(3), 22, 7), ans$)
+        ans$ = add$(MID$(rec$(1), 1, 7), MID$(rec$(2), 1, 7))
+        apprs$ = add$(MID$(rec$(3), 1, 7), ans$)
+   
+        IF totalcomm$ = "" OR totalsales$ = "" OR appt2s$ = "" OR FPAs$ = "" OR appt1s$ = "" OR apprs$ = "" THEN default% = 1
+
+        r$ = ratio$(totalcomm$, totalsales$, 0)
+        avesalesize$ = LTRIM$(LEFT$(r$, LEN(r$) - 4))
+        r$ = ratio$(totalsales$, appt2s$, 0)
+        salesappt2s$ = LTRIM$(LEFT$(r$, LEN(r$) - 4))
+        r$ = ratio$(appt2s$, FPAs$, 0)
+        appt2sFPAs$ = LTRIM$(LEFT$(r$, LEN(r$) - 4))
+        r$ = ratio$(FPAs$, appt1s$, 0)
+        FPAsappt1s$ = LTRIM$(LEFT$(r$, LEN(r$) - 4))
+        r$ = ratio$(appt1s$, apprs$, 0)
+        appt1sapprs$ = LTRIM$(LEFT$(r$, LEN(r$) - 4))
+ 
+        END IF
+ELSE
+
+        CALL readdefaults(a$, b$, c$, d$, e$, success%)
+    
+        totalcomm$ = LTRIM$(RTRIM$(MID$(a$, 1, INSTR(a$, ":") - 1)))
+        totalsales$ = LTRIM$(RTRIM$(MID$(a$, INSTR(a$, ":") + 1, LEN(a$) - INSTR(a$, ":"))))
+        r$ = ratio$(totalcomm$, totalsales$, 0)
+        avesalesize$ = LTRIM$(LEFT$(r$, LEN(r$) - 4))
+    
+        totalsales$ = LTRIM$(RTRIM$(MID$(b$, 1, INSTR(b$, ":") - 1)))
+        appt2s$ = LTRIM$(RTRIM$(MID$(b$, INSTR(b$, ":") + 1, LEN(b$) - INSTR(b$, ":"))))
+        r$ = ratio$(totalsales$, appt2s$, 0)
+        salesappt2s$ = LTRIM$(LEFT$(r$, LEN(r$) - 4))
+    
+        appt2s$ = LTRIM$(RTRIM$(MID$(c$, 1, INSTR(c$, ":") - 1)))
+        FPAs$ = LTRIM$(RTRIM$(MID$(c$, INSTR(c$, ":") + 1, LEN(c$) - INSTR(c$, ":"))))
+        r$ = ratio$(appt2s$, FPAs$, 0)
+        appt2sFPAs$ = LTRIM$(LEFT$(r$, LEN(r$) - 4))
+    
+        FPAs$ = LTRIM$(RTRIM$(MID$(d$, 1, INSTR(d$, ":") - 1)))
+        appt1s$ = LTRIM$(RTRIM$(MID$(d$, INSTR(d$, ":") + 1, LEN(d$) - INSTR(d$, ":"))))
+        r$ = ratio$(FPAs$, appt1s$, 0)
+        FPAsappt1s$ = LTRIM$(LEFT$(r$, LEN(r$) - 4))
+    
+        appt1s$ = LTRIM$(RTRIM$(MID$(e$, 1, INSTR(e$, ":") - 1)))
+        apprs$ = LTRIM$(RTRIM$(MID$(e$, INSTR(e$, ":") + 1, LEN(e$) - INSTR(e$, ":"))))
+        r$ = ratio$(appt1s$, apprs$, 0)
+        appt1sapprs$ = LTRIM$(LEFT$(r$, LEN(r$) - 4))
+
+END IF
+    
+        SELECT CASE f%
+        CASE 1
+                targetcomm$ = target$ + ".00"
+                GOSUB WeekComm
+                GOSUB SalesFromComm
+                GOSUB Appt2sFromSales
+                GOSUB FPAsFromAppt2s
+                GOSUB Appt1sFromFPAs
+                GOSUB ApprsFromAppt1s
+        CASE 2
+                targetsales$ = target$ + ".00"
+                GOSUB WeekSales
+                GOSUB CommFromSales
+                GOSUB Appt2sFromSales
+                GOSUB FPAsFromAppt2s
+                GOSUB Appt1sFromFPAs
+                GOSUB ApprsFromAppt1s
+        CASE 3
+                targetappt2s$ = target$ + ".00"
+                GOSUB WeekAppt2s
+                GOSUB SalesFromAppt2s
+                GOSUB CommFromSales
+                GOSUB FPAsFromAppt2s
+                GOSUB Appt1sFromFPAs
+                GOSUB ApprsFromAppt1s
+        CASE 4
+                targetFPAs$ = target$ + ".00"
+                GOSUB WeekFPAs
+                GOSUB Appt2sFromFPAs
+                GOSUB SalesFromAppt2s
+                GOSUB CommFromSales
+                GOSUB Appt1sFromFPAs
+                GOSUB ApprsFromAppt1s
+        CASE 5
+                targetappt1s$ = target$ + ".00"
+                GOSUB WeekAppt1s
+                GOSUB FPAsFromAppt1s
+                GOSUB Appt2sFromFPAs
+                GOSUB SalesFromAppt2s
+                GOSUB CommFromSales
+                GOSUB ApprsFromAppt1s
+        CASE 6
+                targetapprs$ = target$ + ".00"
+                GOSUB WeekApprs
+                GOSUB Appt1sFromApprs
+                GOSUB FPAsFromAppt1s
+                GOSUB Appt2sFromFPAs
+                GOSUB SalesFromAppt2s
+                GOSUB CommFromSales
+        END SELECT
+
+        IF VAL(RIGHT$(targetcomm$, 2)) > 49 THEN
+                targetcomm$ = LTRIM$(STR$(VAL(LEFT$(targetcomm$, LEN(targetcomm$) - 3)) + 1))
+        ELSE
+                targetcomm$ = LEFT$(targetcomm$, LEN(targetcomm$) - 3)
+        END IF
+        IF VAL(RIGHT$(targetsales$, 2)) > 49 THEN
+                targetsales$ = LTRIM$(STR$(VAL(LEFT$(targetsales$, LEN(targetsales$) - 3)) + 1))
+        ELSE
+                targetsales$ = LEFT$(targetsales$, LEN(targetsales$) - 3)
+        END IF
+        IF VAL(RIGHT$(targetappt2s$, 2)) > 49 THEN
+                targetappt2s$ = LTRIM$(STR$(VAL(LEFT$(targetappt2s$, LEN(targetappt2s$) - 3)) + 1))
+        ELSE
+                targetappt2s$ = LEFT$(targetappt2s$, LEN(targetappt2s$) - 3)
+        END IF
+        IF VAL(RIGHT$(targetFPAs$, 2)) > 49 THEN
+                targetFPAs$ = LTRIM$(STR$(VAL(LEFT$(targetFPAs$, LEN(targetFPAs$) - 3)) + 1))
+        ELSE
+                targetFPAs$ = LEFT$(targetFPAs$, LEN(targetFPAs$) - 3)
+        END IF
+        IF VAL(RIGHT$(targetappt1s$, 2)) > 49 THEN
+                targetappt1s$ = LTRIM$(STR$(VAL(LEFT$(targetappt1s$, LEN(targetappt1s$) - 3)) + 1))
+        ELSE
+                targetappt1s$ = LEFT$(targetappt1s$, LEN(targetappt1s$) - 3)
+        END IF
+        IF VAL(RIGHT$(targetapprs$, 2)) > 49 THEN
+                targetapprs$ = LTRIM$(STR$(VAL(LEFT$(targetapprs$, LEN(targetapprs$) - 3)) + 1))
+        ELSE
+                targetapprs$ = LEFT$(targetapprs$, LEN(targetapprs$) - 3)
+        END IF
+        IF VAL(RIGHT$(targetcommweek$, 2)) > 49 THEN
+                targetcommweek$ = LTRIM$(STR$(VAL(LEFT$(targetcommweek$, LEN(targetcommweek$) - 3)) + 1))
+        ELSE
+                targetcommweek$ = LEFT$(targetcommweek$, LEN(targetcommweek$) - 3)
+        END IF
+        IF VAL(RIGHT$(targetsalesweek$, 2)) > 49 THEN
+                targetsalesweek$ = LTRIM$(STR$(VAL(LEFT$(targetsalesweek$, LEN(targetsalesweek$) - 3)) + 1))
+        ELSE
+                targetsalesweek$ = LEFT$(targetsalesweek$, LEN(targetsalesweek$) - 3)
+        END IF
+        IF VAL(RIGHT$(targetappt2sweek$, 2)) > 49 THEN
+                targetappt2sweek$ = LTRIM$(STR$(VAL(LEFT$(targetappt2sweek$, LEN(targetappt2sweek$) - 3)) + 1))
+        ELSE
+                targetappt2sweek$ = LEFT$(targetappt2sweek$, LEN(targetappt2sweek$) - 3)
+        END IF
+        IF VAL(RIGHT$(targetFPAsweek$, 2)) > 49 THEN
+                targetFPAsweek$ = LTRIM$(STR$(VAL(LEFT$(targetFPAsweek$, LEN(targetFPAsweek$) - 3)) + 1))
+        ELSE
+                targetFPAsweek$ = LEFT$(targetFPAsweek$, LEN(targetFPAsweek$) - 3)
+        END IF
+        IF VAL(RIGHT$(targetappt1sweek$, 2)) > 49 THEN
+                targetappt1sweek$ = LTRIM$(STR$(VAL(LEFT$(targetappt1sweek$, LEN(targetappt1sweek$) - 3)) + 1))
+        ELSE
+                targetappt1sweek$ = LEFT$(targetappt1sweek$, LEN(targetappt1sweek$) - 3)
+        END IF
+        IF VAL(RIGHT$(targetapprsweek$, 2)) > 49 THEN
+                targetapprsweek$ = LTRIM$(STR$(VAL(LEFT$(targetapprsweek$, LEN(targetapprsweek$) - 3)) + 1))
+        ELSE
+                targetapprsweek$ = LEFT$(targetapprsweek$, LEN(targetapprsweek$) - 3)
+        END IF
+
+        IF LEN(targetapprs$) > 8 THEN
+                RESTORE TargetLarge
+                READ al$
+                CALL alertbox(15, 2, yn$)
+                LOCATE 3, 58: PRINT SPACE$(9);
+                LOCATE 4, 59: PRINT " ";
+                GOTO retarget
+        END IF
+        IF LEN(targetappt1s$) > 8 THEN
+                RESTORE TargetLarge
+                READ al$
+                CALL alertbox(15, 2, yn$)
+                LOCATE 3, 58: PRINT SPACE$(9);
+                LOCATE 4, 59: PRINT " ";
+                GOTO retarget
+        END IF
+        IF LEN(targetFPAs$) > 8 THEN
+                RESTORE TargetLarge
+                READ al$
+                CALL alertbox(15, 2, yn$)
+                LOCATE 3, 58: PRINT SPACE$(9);
+                LOCATE 4, 59: PRINT " ";
+                GOTO retarget
+        END IF
+        IF LEN(targetappt2s$) > 8 THEN
+                RESTORE TargetLarge
+                READ al$
+                CALL alertbox(15, 2, yn$)
+                LOCATE 3, 58: PRINT SPACE$(9);
+                LOCATE 4, 59: PRINT " ";
+                GOTO retarget
+        END IF
+        IF LEN(targetsales$) > 8 THEN
+                RESTORE TargetLarge
+                READ al$
+                CALL alertbox(15, 2, yn$)
+                LOCATE 3, 58: PRINT SPACE$(9);
+                LOCATE 4, 59: PRINT " ";
+                GOTO retarget
+        END IF
+        IF LEN(targetcomm$) > 8 THEN
+                RESTORE TargetLarge
+                READ al$
+                CALL alertbox(15, 2, yn$)
+                LOCATE 3, 58: PRINT SPACE$(9);
+                LOCATE 4, 59: PRINT " ";
+                GOTO retarget
+        END IF
+
+
+        LOCATE 9, left% + 31: PRINT SPACE$(8 - LEN(targetapprs$)); targetapprs$
+        LOCATE 10, left% + 31: PRINT SPACE$(8 - LEN(targetappt1s$)); targetappt1s$
+        LOCATE 11, left% + 31: PRINT SPACE$(8 - LEN(targetFPAs$)); targetFPAs$
+        LOCATE 12, left% + 31: PRINT SPACE$(8 - LEN(targetappt2s$)); targetappt2s$
+        LOCATE 13, left% + 31: PRINT SPACE$(8 - LEN(targetsales$)); targetsales$
+        LOCATE 14, left% + 31: PRINT SPACE$(8 - LEN(targetcomm$)); targetcomm$
+
+        LOCATE 18, left% + 31: PRINT SPACE$(8 - LEN(targetapprsweek$)); targetapprsweek$
+        LOCATE 19, left% + 31: PRINT SPACE$(8 - LEN(targetappt1sweek$)); targetappt1sweek$
+        LOCATE 20, left% + 31: PRINT SPACE$(8 - LEN(targetFPAsweek$)); targetFPAsweek$
+        LOCATE 21, left% + 31: PRINT SPACE$(8 - LEN(targetappt2sweek$)); targetappt2sweek$
+        LOCATE 22, left% + 31: PRINT SPACE$(8 - LEN(targetsalesweek$)); targetsalesweek$
+        LOCATE 23, left% + 31, 0: PRINT SPACE$(8 - LEN(targetcommweek$)); targetcommweek$
+
+CALL promptdisplay("P to Print, R to Re-enter Figures, Any Other Key for Main Menu", 25, 15, 0, 1)
+CALL screeninarray(1)
+CALL putscreenarray("        ", 1, 73, 1)
+
+KeyPoint:
+DO
+k$ = INKEY$
+LOOP UNTIL k$ <> ""
+info$ = detail$(1, 1) + "   " + detail$(1, 0)
+IF k$ = "r" OR k$ = "R" THEN
+    
+        LOCATE 3, 58: PRINT SPACE$(9)
+        LOCATE 4, 59: PRINT " "
+
+        LOCATE 9, left% + 31: PRINT SPACE$(8)
+        LOCATE 10, left% + 31: PRINT SPACE$(8)
+        LOCATE 11, left% + 31: PRINT SPACE$(8)
+        LOCATE 12, left% + 31: PRINT SPACE$(8)
+        LOCATE 13, left% + 31: PRINT SPACE$(8)
+        LOCATE 14, left% + 31: PRINT SPACE$(8)
+
+        LOCATE 18, left% + 31: PRINT SPACE$(8)
+        LOCATE 19, left% + 31: PRINT SPACE$(8)
+        LOCATE 20, left% + 31: PRINT SPACE$(8)
+        LOCATE 21, left% + 31: PRINT SPACE$(8)
+        LOCATE 22, left% + 31: PRINT SPACE$(8)
+        LOCATE 23, left% + 31, 0: PRINT SPACE$(8)
+    
+        GOTO retarget
+END IF
+
+IF k$ = "p" OR k$ = "P" THEN
+        CALL checkprinter(retry%)
+        IF retry% = 1 THEN
+                LPRINT CHR$(27); "6";
+                LPRINT CHR$(13); CHR$(13); CHR$(13); CHR$(13);
+                LPRINT SPACE$(63); "ษออออออออออป"
+                LPRINT SPACE$(63); "บ ACTIVITY บ"
+                LPRINT SPACE$(63); "ศออออออออออผ"
+                LPRINT CHR$(13);
+                LPRINT SPACE$((80 - LEN(info$)) / 2); info$
+                LPRINT CHR$(13);
+                info2$ = "Target Planning for " + m$ + " " + y$
+                LPRINT SPACE$((80 - LEN(info2$)) / 2); info2$
+                LPRINT CHR$(13);
+                LPRINT SPACE$((80 - LEN(levelpath1$) - LEN(levelpath2$) - 3) / 2); levelpath1$ + " - " + levelpath2$
+                LPRINT CHR$(13);
+                CALL printscreenarray(1, 2, 5)
+                LPRINT CHR$(13); CHR$(13); CHR$(13);
+                CALL printscreenarray(1, 6, 14)
+                LPRINT SPACE$(left% - 1); bot$
+                LPRINT CHR$(13); CHR$(13); CHR$(13);
+                LPRINT SPACE$(left% - 1); top$
+                CALL printscreenarray(1, 16, 23)
+                LPRINT SPACE$(left% - 1); bot$
+                LPRINT CHR$(13); CHR$(13); CHR$(13); CHR$(13); CHR$(13); CHR$(13);
+                LPRINT SPACE$(8); "      Adviser "; STRING$(36, 46)
+                LPRINT CHR$(13); CHR$(13); CHR$(13);
+                LPRINT SPACE$(8); "      Manager "; STRING$(36, 46)
+                LPRINT CHR$(13); CHR$(13); CHR$(13);
+                LPRINT CHR$(13); CHR$(13); CHR$(13); CHR$(13);
+                LPRINT SPACE$(2); MID$(DATE$, 4, 2); "/"; LEFT$(DATE$, 2); "/"; RIGHT$(DATE$, 4); SPACE$(68);
+                LPRINT CHR$(12);
+        ELSE
+                GOTO KeyPoint
+        END IF
+END IF
+
+CLS
+
+EXIT SUB
+
+bombout6:
+CLOSE
+RESTORE UnSuccessful
+READ al$
+CALL alertbox(15, 3, yn$)
+
+EXIT SUB
+
+SalesFromComm:
+        targetsales$ = ratio$(targetcomm$, avesalesize$, 0)
+        targetsales$ = LTRIM$(RTRIM$(targetsales$))
+        targetsales$ = LEFT$(targetsales$, LEN(targetsales$) - 4)
+        targetsalesweek$ = ratio$(targetsales$, weeks$, 0)
+        targetsalesweek$ = LTRIM$(RTRIM$(targetsalesweek$))
+        targetsalesweek$ = LEFT$(targetsalesweek$, LEN(targetsalesweek$) - 4)
+RETURN
+
+Appt2sFromSales:
+        targetappt2s$ = ratio$(targetsales$, salesappt2s$, 0)
+        targetappt2s$ = LTRIM$(RTRIM$(targetappt2s$))
+        targetappt2s$ = LEFT$(targetappt2s$, LEN(targetappt2s$) - 4)
+        targetappt2sweek$ = ratio$(targetappt2s$, weeks$, 0)
+        targetappt2sweek$ = LTRIM$(RTRIM$(targetappt2sweek$))
+        targetappt2sweek$ = LEFT$(targetappt2sweek$, LEN(targetappt2sweek$) - 4)
+RETURN
+
+FPAsFromAppt2s:
+        targetFPAs$ = ratio$(targetappt2s$, appt2sFPAs$, 0)
+        targetFPAs$ = LTRIM$(RTRIM$(targetFPAs$))
+        targetFPAs$ = LEFT$(targetFPAs$, LEN(targetFPAs$) - 4)
+        targetFPAsweek$ = ratio$(targetFPAs$, weeks$, 0)
+        targetFPAsweek$ = LTRIM$(RTRIM$(targetFPAsweek$))
+        targetFPAsweek$ = LEFT$(targetFPAsweek$, LEN(targetFPAsweek$) - 4)
+RETURN
+
+Appt1sFromFPAs:
+        targetappt1s$ = ratio$(targetFPAs$, FPAsappt1s$, 0)
+        targetappt1s$ = LTRIM$(RTRIM$(targetappt1s$))
+        targetappt1s$ = LEFT$(targetappt1s$, LEN(targetappt1s$) - 4)
+        targetappt1sweek$ = ratio$(targetappt1s$, weeks$, 0)
+        targetappt1sweek$ = LTRIM$(RTRIM$(targetappt1sweek$))
+        targetappt1sweek$ = LEFT$(targetappt1sweek$, LEN(targetappt1sweek$) - 4)
+RETURN
+
+ApprsFromAppt1s:
+        targetapprs$ = ratio$(targetappt1s$, appt1sapprs$, 0)
+        targetapprs$ = LTRIM$(RTRIM$(targetapprs$))
+        targetapprs$ = LEFT$(targetapprs$, LEN(targetapprs$) - 4)
+        targetapprsweek$ = ratio$(targetapprs$, weeks$, 0)
+        targetapprsweek$ = LTRIM$(RTRIM$(targetapprsweek$))
+        targetapprsweek$ = LEFT$(targetapprsweek$, LEN(targetapprsweek$) - 4)
+RETURN
+
+'Now the reverse ratio routines
+
+CommFromSales:
+        targetcomm$ = reverseratio$(avesalesize$, targetsales$, 0)
+        targetcomm$ = LTRIM$(RTRIM$(targetcomm$))
+        targetcomm$ = LEFT$(targetcomm$, LEN(targetcomm$) - 4)
+        targetcommweek$ = ratio$(targetcomm$, weeks$, 0)
+        targetcommweek$ = LTRIM$(RTRIM$(targetcommweek$))
+        targetcommweek$ = LEFT$(targetcommweek$, LEN(targetcommweek$) - 4)
+RETURN
+
+SalesFromAppt2s:
+        targetsales$ = reverseratio$(salesappt2s$, targetappt2s$, 0)
+        targetsales$ = LTRIM$(RTRIM$(targetsales$))
+        targetsales$ = LEFT$(targetsales$, LEN(targetsales$) - 4)
+        targetsalesweek$ = ratio$(targetsales$, weeks$, 0)
+        targetsalesweek$ = LTRIM$(RTRIM$(targetsalesweek$))
+        targetsalesweek$ = LEFT$(targetsalesweek$, LEN(targetsalesweek$) - 4)
+RETURN
+
+Appt2sFromFPAs:
+        targetappt2s$ = reverseratio$(appt2sFPAs$, targetFPAs$, 0)
+        targetappt2s$ = LTRIM$(RTRIM$(targetappt2s$))
+        targetappt2s$ = LEFT$(targetappt2s$, LEN(targetappt2s$) - 4)
+        targetappt2sweek$ = ratio$(targetappt2s$, weeks$, 0)
+        targetappt2sweek$ = LTRIM$(RTRIM$(targetappt2sweek$))
+        targetappt2sweek$ = LEFT$(targetappt2sweek$, LEN(targetappt2sweek$) - 4)
+RETURN
+
+FPAsFromAppt1s:
+        targetFPAs$ = reverseratio$(FPAsappt1s$, targetappt1s$, 0)
+        targetFPAs$ = LTRIM$(RTRIM$(targetFPAs$))
+        targetFPAs$ = LEFT$(targetFPAs$, LEN(targetFPAs$) - 4)
+        targetFPAsweek$ = ratio$(targetFPAs$, weeks$, 0)
+        targetFPAsweek$ = LTRIM$(RTRIM$(targetFPAsweek$))
+        targetFPAsweek$ = LEFT$(targetFPAsweek$, LEN(targetFPAsweek$) - 4)
+RETURN
+
+Appt1sFromApprs:
+        targetappt1s$ = reverseratio$(appt1sapprs$, targetapprs$, 0)
+        targetappt1s$ = LTRIM$(RTRIM$(targetappt1s$))
+        targetappt1s$ = LEFT$(targetappt1s$, LEN(targetappt1s$) - 4)
+        targetappt1sweek$ = ratio$(targetappt1s$, weeks$, 0)
+        targetappt1sweek$ = LTRIM$(RTRIM$(targetappt1sweek$))
+        targetappt1sweek$ = LEFT$(targetappt1sweek$, LEN(targetappt1sweek$) - 4)
+RETURN
+
+WeekComm:
+        targetcommweek$ = ratio$(targetcomm$, weeks$, 0)
+        targetcommweek$ = LTRIM$(RTRIM$(targetcommweek$))
+        targetcommweek$ = LEFT$(targetcommweek$, LEN(targetcommweek$) - 4)
+RETURN
+
+WeekSales:
+        targetsalesweek$ = ratio$(targetsales$, weeks$, 0)
+        targetsalesweek$ = LTRIM$(RTRIM$(targetsalesweek$))
+        targetsalesweek$ = LEFT$(targetsalesweek$, LEN(targetsalesweek$) - 4)
+RETURN
+
+WeekAppt2s:
+        targetappt2sweek$ = ratio$(targetappt2s$, weeks$, 0)
+        targetappt2sweek$ = LTRIM$(RTRIM$(targetappt2sweek$))
+        targetappt2sweek$ = LEFT$(targetappt2sweek$, LEN(targetappt2sweek$) - 4)
+RETURN
+
+WeekFPAs:
+        targetFPAsweek$ = ratio$(targetFPAs$, weeks$, 0)
+        targetFPAsweek$ = LTRIM$(RTRIM$(targetFPAsweek$))
+        targetFPAsweek$ = LEFT$(targetFPAsweek$, LEN(targetFPAsweek$) - 4)
+RETURN
+
+WeekAppt1s:
+        targetappt1sweek$ = ratio$(targetappt1s$, weeks$, 0)
+        targetappt1sweek$ = LTRIM$(RTRIM$(targetappt1sweek$))
+        targetappt1sweek$ = LEFT$(targetappt1sweek$, LEN(targetappt1sweek$) - 4)
+RETURN
+
+WeekApprs:
+        targetapprsweek$ = ratio$(targetapprs$, weeks$, 0)
+        targetapprsweek$ = LTRIM$(RTRIM$(targetapprsweek$))
+        targetapprsweek$ = LEFT$(targetapprsweek$, LEN(targetapprsweek$) - 4)
+RETURN
+
+END SUB
+

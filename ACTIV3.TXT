@@ -1,0 +1,1717 @@
+DECLARE SUB openfile (filename$, filenum%, type$, reclen%, retry%)
+DECLARE SUB getseq (filenum%, g$, l%, retry%)
+DECLARE SUB putseq (filenum%, p$, retry%)
+DECLARE SUB getrandom (filenum%, t%, recnum%, retry%)
+DECLARE SUB putrandom (filenum%, t%, recnum%, retry%)
+DECLARE SUB killfile (filename$, retry%)
+DECLARE SUB makedir (dir$, retry%)
+DECLARE SUB remdir (dir$, retry%)
+DECLARE SUB rename (old$, new$, retry%)
+DECLARE SUB checkprinter (retry%)
+DECLARE SUB menu (numberofoptions%, selection%, top%, t%, promptline%, rubout%)
+DECLARE SUB promptdisplay (prompt$, promptline%, promptfore%, promptback%, clearline%)
+DECLARE SUB displaysublevels (disp%, levelpath1$, levelpath2$)
+DECLARE SUB alertbox (top%, numberofalerts%, yesorno$)
+DECLARE SUB ruboutmenu (top%, t%, numberofoptions%)
+DECLARE SUB agentmenudata (l%, n%, includeunit%, success%)
+DECLARE SUB checkexist (l%, newname$, newnum$, exist%, success%)
+DECLARE SUB nukedir (dir$, dir%, success%)
+DECLARE SUB importengine (num$, success%)
+DECLARE SUB exportengine (success%)
+DECLARE SUB writeconfig (filename$, numberofdbs%, managername$, managernum$, success%)
+DECLARE SUB readconfig (filename$, numberofdbs%, managername$, managernum$, success%)
+DECLARE SUB league (lev%, l%, leaguelevel%, n%, success%)
+DECLARE SUB removeagent (l%, num$, success%)
+DECLARE SUB compiledb (l%, d%)
+DECLARE SUB insertagent (l%, name$, num$, success%)
+DECLARE SUB cascadecheck (l%, n%, file$, ret%, ad%, success%)
+DECLARE FUNCTION getlevel$ (l%, plural%, short%)
+DECLARE FUNCTION add$ (a$, b$)
+DECLARE FUNCTION decrypt$ (in$)
+DECLARE FUNCTION encrypt$ (in$)
+
+'$INCLUDE: 'common.inc'
+
+OnlyOneAgent:
+DATA You Can't Have A League Table|With Only One Adviser|PAK|
+                                 
+LeagueLevelMenu:
+DATA Previous Menu|Returns To The Previous Menu
+DATA Advisers|Produces A League Table Of Advisers
+DATA Sales Teams|Produces A League Table Of Sales Teams
+DATA Branches|Produces A League Table Of Branches
+DATA Snr Branches|Produces A League Table Of Senior Branches
+DATA Regions|Produces A League Table Of Regions
+
+LeagueTableFields:
+DATA Approaches|Selects Approaches
+DATA Appointments Made|Selects Appointments Made
+DATA Appointments This Week|Selects Appointments This Week
+DATA 1st Appointments|Selects 1st Appointments
+DATA 2nd Appointments|Selects 2nd Appointments
+DATA Total FPAs|Selects Total FPAs
+DATA CUFSELL FPAs|Selects CUFSELL FPAs
+DATA Total Sales|Selects Total Sales
+DATA CUFSELL Sales|Selects CUFSELL Sales
+DATA Total Commission|Selects Total Commission
+DATA CUFSELL Commission|Selects CUFSELL Commission
+DATA Service Calls|Selects Service Calls
+DATA Referrals|Selects Referrals
+DATA Name|Selects Name
+DATA Previous Menu|Returns to the Previous Menu
+
+FieldDisplayData2:
+DATA Approaches,Appts Made
+DATA Appts Week,1st Appts
+DATA 2nd Appts,Total FPAs,CUFSELL FPAs
+DATA Total Sales,CUFSELL Sales
+DATA Total Comm,CUFSELL Comm
+DATA Service Calls,Referrals
+
+LTData:
+DATA To Screen|Displays The League Table On Screen
+DATA To Printer|Prints The League Table
+DATA Previous Menu|Returns To The Previous Menu
+
+NoDataAvailable:
+DATA There Is No Data Available|PAK|
+
+UnSuccessful:
+DATA Unsuccessful Attempt To Retrieve Data|Operation Aborted|PAK|
+
+DiskSwap2:
+DATA Please Insert Disk *|PAK|
+
+WrongSequence:
+DATA You Have Inserted Disk *|Please Insert Disk #|PAK|
+
+ExportLimit:
+DATA This Disk Has Reached Its Limit|For Exporting Data|PAK|
+
+DiskSwap:
+DATA Disk Full|Please Insert Another Disk|PAK|
+
+Sure:
+DATA Are You SURE (Y/N)?|
+
+DoneDel:
+DATA The * Has Been Deleted|PAK|
+
+ContainsSubLevels:
+DATA The * Specified Has * In It|It Cannot Be Deleted|PAK|
+
+ExportWarning:
+DATA "Please Insert An Export Disk Into Drive A:|Warning: All Data Will Be Erased From It|PAK|"
+
+ImportReady:
+DATA "Please Insert An Import Disk Into Drive A:|PAK|"
+
+NoImp:
+DATA There Are No * To Import|From This Disk|PAK|
+
+ImpExisting:           
+DATA You Have Tried To Import An Existing *|Go Ahead (Y/N)?|
+
+ImpTerm:
+DATA You Have Tried To Import A Terminated *|Terminated * Are No Longer Accessible|PAK|
+
+SUB deleteagent (l%)
+
+IF l% = 4 THEN
+        t% = 43
+ELSEIF l% = 2 THEN
+        t% = 37
+ELSEIF l% = 1 THEN
+        t% = 40
+ELSE
+        t% = 39
+END IF
+
+CALL cascadecheck(l%, numberofdbs%, filename$, ret%, 0, s%)
+IF s% = 0 THEN GOTO faileddel
+IF ret% <> 0 THEN EXIT SUB
+
+CALL agentmenudata(l%, n%, 0, s%)
+IF s% = 0 THEN GOTO faileddel
+option$(0) = "Delete " + getlevel$(l%, 0, 0)
+CALL menu(n%, selection%, 4, t%, 25, 0)
+IF selection% < n% THEN
+        name$ = RTRIM$(LEFT$(option$(selection%), 25))
+        num$ = RTRIM$(RIGHT$(option$(selection%), 7))
+ELSEIF selection% = n% THEN
+        CALL ruboutmenu(4, t%, n%)
+        EXIT SUB
+END IF
+
+IF l% > 1 THEN
+        p$ = path$
+        FOR i% = 5 TO l% + 1 STEP -1
+                p$ = p$ + detail$(i%, 0) + "\"
+        NEXT
+        g$ = LCASE$(getlevel$(l%, 0, 1))
+        IF g$ = "snr branch" THEN g$ = "area"
+        CALL readconfig(p$ + num$ + "\" + g$ + ".cfg", numberofdbs%, man1$, man2$, s%)
+        IF numberofdbs% <> 0 THEN GOTO notempty
+END IF
+
+RESTORE Sure
+READ al$
+CALL alertbox(15, 1, yn$)
+IF yn$ <> "y" THEN
+        CALL ruboutmenu(4, t%, n%)
+        EXIT SUB
+END IF
+
+CALL promptdisplay("Deleting " + getlevel$(l%, 0, 0) + "...", 20, VAL(MID$(colour$, 25, 2)), VAL(MID$(colour$, 27, 2)), 1)
+p$ = path$
+FOR i% = 5 TO l% + 1 STEP -1
+        p$ = p$ + detail$(i%, 0) + "\"
+NEXT
+
+CALL removeagent(l%, num$, s%)
+IF s% = 0 THEN GOTO faileddel
+g$ = LCASE$(getlevel$(l% + 1, 0, 1))
+IF g$ = "snr branch" THEN g$ = "area"
+CALL readconfig(p$ + g$ + ".cfg", numberofdbs%, man1$, man2$, s%)
+IF s% = 0 THEN GOTO faileddel
+CALL writeconfig(p$ + g$ + ".cfg", numberofdbs% - 1, man1$, man2$, s%)
+IF s% = 0 THEN GOTO faileddel
+
+IF l% = 1 THEN
+        CALL killfile(p$ + num$ + ".*", retry%)
+        IF retry% = 0 THEN GOTO faileddel
+ELSE
+        CALL killfile(p$ + num$ + ".*", retry%)
+        IF retry% = 0 THEN GOTO faileddel
+        CALL killfile(p$ + num$ + "\*.*", retry%)
+        IF retry% = 0 THEN GOTO faileddel
+        CALL remdir(p$ + num$, retry%)
+        IF retry% = 0 THEN GOTO faileddel
+END IF
+
+IF l% = 1 THEN CALL compiledb(1, 1)
+
+CALL promptdisplay("", 20, 0, 0, 1)
+RESTORE DoneDel
+READ al$
+al$ = LEFT$(al$, INSTR(al$, "*") - 1) + getlevel$(l%, 0, 0) + MID$(al$, INSTR(al$, "*") + 1)
+CALL alertbox(15, 2, yn$)
+
+detail$(l%, 1) = ""
+detail$(l%, 0) = ""
+CALL displaysublevels(1, "", "")
+CALL ruboutmenu(4, t%, n%)
+EXIT SUB
+
+notempty:
+RESTORE ContainsSubLevels
+READ al$
+al$ = LEFT$(al$, INSTR(al$, "*") - 1) + getlevel$(l%, 0, 0) + MID$(al$, INSTR(al$, "*") + 1)
+al$ = LEFT$(al$, INSTR(al$, "*") - 1) + getlevel$(l% - 1, 1, 0) + MID$(al$, INSTR(al$, "*") + 1)
+IF l% = 4 THEN
+        al$ = LEFT$(al$, INSTR(al$, "In") - 1) + "Under" + MID$(al$, INSTR(al$, "In") + 2)
+END IF
+CALL alertbox(15, 3, yn$)
+CALL ruboutmenu(4, t%, n%)
+EXIT SUB
+
+faileddel:
+CALL promptdisplay("", 18, 0, 0, 1)
+RESTORE UnSuccessful
+READ al$
+CALL alertbox(15, 3, yn$)
+CALL ruboutmenu(4, t%, n%)
+END SUB
+
+SUB exportdb (l%)
+
+DIM d$(6, 1)
+FOR i% = 1 TO 6
+        d$(i%, 1) = detail$(i%, 1)
+        d$(i%, 0) = detail$(i%, 0)
+NEXT
+IF l% = 4 THEN
+        t% = 43
+ELSEIF l% = 2 THEN
+        t% = 37
+ELSEIF l% = 1 THEN
+        t% = 40
+ELSE
+        t% = 39
+END IF
+CALL cascadecheck(l%, numberofdbs%, filename$, ret%, 0, s%)
+IF s% = 0 THEN GOSUB failedexp: EXIT SUB
+IF ret% <> 0 THEN EXIT SUB
+
+CALL agentmenudata(l%, n%, 1, s%)
+IF s% = 0 THEN GOSUB failedexp: EXIT SUB
+option$(0) = "Export " + getlevel$(l%, 0, 0)
+CALL menu(n%, selection%, 4, t%, 25, 0)
+IF selection% = n% THEN
+        CALL ruboutmenu(4, t%, n%)
+        EXIT SUB
+ELSEIF selection% = n% - 1 THEN
+        IF l% + 1 = 6 THEN
+                detail$(l% + 1, 1) = "U.K."
+                detail$(l% + 1, 0) = "uk"
+        END IF
+        detail$(l%, 1) = ""
+        detail$(l%, 0) = ""
+ELSE
+        detail$(l%, 1) = RTRIM$(LEFT$(option$(selection%), 25))
+        detail$(l%, 0) = RTRIM$(RIGHT$(option$(selection%), 7))
+END IF
+
+RESTORE ExportWarning
+READ al$
+CALL alertbox(15, 3, y$)
+IF y$ = "esc" THEN
+        CALL ruboutmenu(4, t%, n%)
+        EXIT SUB
+END IF
+
+CALL promptdisplay("Clearing Disk - Please Wait...", 20, VAL(MID$(colour$, 25, 2)), VAL(MID$(colour$, 27, 2)), 1)
+FOR i% = 1 TO l% - 1
+        detail$(i%, 1) = ""
+        detail$(i%, 0) = ""
+NEXT
+CALL nukedir("A:", 1, s%)
+IF s% = 0 THEN GOSUB failedexp: GOTO doneexp
+backup% = 1
+CALL promptdisplay("Exporting Database - Please Wait...", 20, VAL(MID$(colour$, 25, 2)), VAL(MID$(colour$, 27, 2)), 1)
+CALL exportengine(s%)
+backup% = 0
+IF s% = 0 THEN GOSUB failedexp
+doneexp:
+CALL promptdisplay("", 20, 0, 0, 1)
+CALL ruboutmenu(4, t%, n%)
+FOR i% = 1 TO 6
+        detail$(i%, 1) = d$(i%, 1)
+        detail$(i%, 0) = d$(i%, 0)
+NEXT
+
+EXIT SUB
+
+failedexp:
+CLOSE
+RESTORE UnSuccessful
+READ al$
+CALL alertbox(15, 3, yesorno$)
+RETURN
+
+END SUB
+
+SUB exportengine (success%)
+
+curyear% = VAL(RIGHT$(DATE$, 4))
+curmonth% = VAL(LEFT$(DATE$, 2))
+success% = 1
+p$ = path$
+FOR i% = 1 TO 6
+        IF detail$(i%, 0) = "" THEN level% = i% + 1
+NEXT
+IF level% = 0 THEN level% = 1
+
+FOR i% = 5 TO level% STEP -1
+        p$ = p$ + detail$(i%, 0) + "\"
+NEXT
+file$ = LEFT$(p$, LEN(p$) - 1)
+IF level% = 6 THEN file$ = p$ + "uk"
+
+g$ = LCASE$(getlevel$(level%, 0, 1))
+IF g$ = "snr branch" THEN g$ = "area"
+datfile$ = "A:\" + g$ + ".dat"
+CALL openfile(datfile$, 1, "R", 32, r%)
+IF r% <> 1 THEN success% = 0: EXIT SUB
+IF LOF(1) / 32 = 31 THEN
+        RESTORE ExportLimit
+        READ al$
+        CALL alertbox(15, 3, y$)
+        EXIT SUB
+END IF
+agentsinteam.agentname = encrypt$(detail$(level%, 1) + SPACE$(25 - LEN(detail$(level%, 1))))
+agentsinteam.agentnumber = encrypt$(detail$(level%, 0) + SPACE$(7 - LEN(detail$(level%, 0))))
+CALL putrandom(1, 1, LOF(1) / 32 + 1, r%)
+IF r% <> 1 THEN success% = 0: EXIT SUB
+CLOSE #1
+
+y% = curyear%
+finum% = 1
+CALL openfile("A:\" + detail$(level%, 0), 2, "SO", 148, retry%)
+IF retry% <> 1 THEN success% = 0: CLOSE : EXIT SUB
+CALL putseq(2, LTRIM$(RTRIM$(STR$(finum%))), r%)
+IF retry% <> 1 THEN success% = 0: CLOSE : EXIT SUB
+found% = 0
+first% = 1
+DO
+IF y% <> curyear% OR first% = 1 THEN
+        extension$ = "." + LTRIM$(RTRIM$(STR$(y% MOD 100)))
+ELSE
+        extension$ = ".db"
+END IF
+
+filename$ = file$ + extension$
+
+CALL openfile(filename$, 1, "R", 148, retry%)
+IF retry% <> 1 THEN success% = 0: CLOSE : EXIT SUB
+length% = (LOF(1) / 148)
+IF length% = 0 THEN
+        CLOSE #1
+        CALL killfile(filename$, retry%)
+        IF retry% <> 1 THEN success% = 0: CLOSE : EXIT SUB
+        IF found% = 0 THEN
+                IF first% = 0 THEN y% = y% - 1
+                first% = 0
+                GOTO roundagain
+        END IF
+        CALL putseq(2, CHR$(1), r%)
+        IF r% = 0 THEN success% = 0: EXIT SUB
+        IF r% = 2 THEN
+                GOSUB nextdisk
+                CALL putseq(2, CHR$(1), r%)
+                IF r% <> 1 THEN success% = 0: CLOSE : EXIT SUB
+        END IF
+        CLOSE #2
+        GOTO donenode
+END IF
+found% = 1
+CALL putseq(2, extension$, r%)
+IF r% = 0 THEN success% = 0: EXIT SUB
+IF r% = 2 THEN
+        GOSUB nextdisk
+        CALL putseq(2, extension$, r%)
+        IF r% <> 1 THEN success% = 0: CLOSE : EXIT SUB
+END IF
+FOR i% = 1 TO length%
+        CALL getrandom(1, 2, i%, r%)
+        IF r% = 0 THEN success% = 0: EXIT SUB
+        a$ = agentweek.wholerecord
+        CALL putseq(2, a$, r%)
+        IF r% = 0 THEN success% = 0: EXIT SUB
+        IF r% = 2 THEN
+                GOSUB nextdisk
+                CALL putseq(2, a$, r%)
+                IF r% <> 1 THEN success% = 0: CLOSE : EXIT SUB
+        END IF
+NEXT
+CALL putseq(2, CHR$(255), r%)
+IF r% = 0 THEN success% = 0: EXIT SUB
+IF r% = 2 THEN
+        GOSUB nextdisk
+        CALL putseq(2, CHR$(255), r%)
+        IF r% <> 1 THEN success% = 0: CLOSE : EXIT SUB
+END IF
+
+CLOSE #1
+IF found% = 1 THEN first% = 0: y% = y% - 1
+roundagain:
+LOOP
+
+donenode:
+inffile% = 1
+IF level% = 1 THEN EXIT SUB
+g$ = LCASE$(getlevel$(level%, 0, 1))
+IF g$ = "snr branch" THEN g$ = "area"
+CALL readconfig(p$ + g$ + ".cfg", numberofdbs%, a$, b$, s%)
+IF s% = 0 THEN success% = 0: EXIT SUB
+g$ = LCASE$(getlevel$(level% - 1, 0, 1))
+IF g$ = "snr branch" THEN g$ = "area"
+datfile$ = p$ + g$ + ".dat"
+
+IF level% = 2 THEN
+        CALL openfile(p$ + "advisert.dat", 1, "R", 32, retry%)
+        IF retry% = 0 THEN CLOSE : EXIT SUB
+        n% = numberofdbs% + LOF(1) / 32
+        CLOSE 1
+        IF n% = numberofdbs% THEN
+                CALL killfile(p$ + "advisert.dat", retry%)
+                IF retry% = 0 THEN CLOSE : EXIT SUB
+        END IF
+ELSE
+        n% = numberofdbs%
+END IF
+
+IF n% = 0 THEN EXIT SUB
+CALL openfile("A:\" + detail$(level%, 0) + ".inf", 7, "SO", 148, retry%)
+IF retry% <> 1 THEN success% = 0: CLOSE : EXIT SUB
+CALL putseq(7, LTRIM$(RTRIM$(STR$(numberofdbs%))), r%)
+IF r% = 0 THEN success% = 0: CLOSE : EXIT SUB
+IF r% = 2 THEN
+        GOSUB nextdisk
+        CALL putseq(7, LTRIM$(RTRIM$(STR$(numberofdbs%))), r%)
+        IF r% <> 1 THEN success% = 0: CLOSE : EXIT SUB
+END IF
+CALL putseq(7, a$, r%)
+IF r% = 0 THEN success% = 0: CLOSE : EXIT SUB
+IF r% = 2 THEN
+        GOSUB nextdisk
+        CALL putseq(7, a$, r%)
+        IF r% <> 1 THEN success% = 0: CLOSE : EXIT SUB
+END IF
+CALL putseq(7, b$, r%)
+IF r% = 0 THEN success% = 0: CLOSE : EXIT SUB
+IF r% = 2 THEN
+        GOSUB nextdisk
+        CALL putseq(7, b$, r%)
+        IF r% <> 1 THEN success% = 0: CLOSE : EXIT SUB
+END IF
+CALL putseq(7, LTRIM$(RTRIM$(STR$(n% - numberofdbs%))), r%)
+IF r% = 0 THEN success% = 0: CLOSE : EXIT SUB
+IF r% = 2 THEN
+        GOSUB nextdisk
+        CALL putseq(7, LTRIM$(RTRIM$(STR$(n% - numberofdbs%))), r%)
+        IF r% <> 1 THEN success% = 0: CLOSE : EXIT SUB
+END IF
+
+DIM dbfilenum$(n%, 1)
+
+CALL openfile(datfile$, 1, "R", 32, retry%)
+IF retry% = 0 THEN success% = 0: EXIT SUB
+FOR i% = 1 TO numberofdbs%
+        CALL getrandom(1, 1, i%, retry%)
+        IF retry% = 0 THEN success% = 0: CLOSE : EXIT SUB
+        dbnum$ = LTRIM$(RTRIM$(decrypt$(agentsinteam.agentnumber)))
+        dbname$ = LTRIM$(RTRIM$(decrypt$(agentsinteam.agentname)))
+        db$ = agentsinteam.agentname + agentsinteam.agentnumber
+        dbfilenum$(i%, 0) = dbnum$
+        dbfilenum$(i%, 1) = dbname$
+        CALL putseq(7, db$, r%)
+        IF r% = 0 THEN success% = 0: CLOSE : EXIT SUB
+        IF r% = 2 THEN
+                GOSUB nextdisk
+                CALL putseq(7, dbnum$, r%)
+                IF r% <> 1 THEN success% = 0: CLOSE : EXIT SUB
+        END IF
+NEXT
+CLOSE #1
+IF n% > numberofdbs% THEN
+        CALL openfile(p$ + "advisert.dat", 1, "R", 32, retry%)
+        IF retry% = 0 THEN CLOSE : EXIT SUB
+        FOR i% = numberofdbs% + 1 TO n%
+                CALL getrandom(1, 1, i%, retry%)
+                IF retry% = 0 THEN success% = 0: CLOSE : EXIT SUB
+                dbnum$ = LTRIM$(RTRIM$(decrypt$(agentsinteam.agentnumber)))
+                dbname$ = LTRIM$(RTRIM$(decrypt$(agentsinteam.agentname)))
+                db$ = agentsinteam.agentname + agentsinteam.agentnumber
+                dbfilenum$(i%, 0) = dbnum$
+                dbfilenum$(i%, 1) = dbname$
+                CALL putseq(7, db$, r%)
+                IF r% = 0 THEN success% = 0: CLOSE : EXIT SUB
+                IF r% = 2 THEN
+                        GOSUB nextdisk
+                        CALL putseq(7, dbnum$, r%)
+                        IF r% <> 1 THEN success% = 0: CLOSE : EXIT SUB
+                END IF
+        NEXT
+        CLOSE #1
+END IF
+CLOSE #7
+IF retry% = 0 THEN success% = 0: EXIT SUB
+FOR i% = 1 TO numberofdbs%
+        d$ = detail$(level% - 1, 0)
+        e$ = detail$(level% - 1, 1)
+        detail$(level% - 1, 0) = dbfilenum$(i%, 0)
+        detail$(level% - 1, 1) = dbfilenum$(i%, 1)
+        CALL exportengine(s%)
+        detail$(level% - 1, 0) = d$
+        detail$(level% - 1, 1) = e$
+        IF s% = 0 THEN success% = 0: CLOSE : EXIT SUB
+NEXT
+EXIT SUB
+
+nextdisk:
+IF inffile% = 1 THEN
+        CLOSE #7
+ELSE
+        CLOSE #2
+END IF
+RESTORE DiskSwap
+READ al$
+CALL alertbox(15, 3, y$)
+IF y$ = "esc" THEN CLOSE : success% = 0: EXIT SUB
+finum% = finum% + 1
+IF inffile% = 1 THEN
+        CALL openfile("A:\" + detail$(level%, 0) + ".inf", 7, "SO", 148, retry%)
+        IF retry% <> 1 THEN success% = 0: CLOSE : EXIT SUB
+        CALL putseq(7, LTRIM$(RTRIM$(STR$(finum%))), r%)
+        IF retry% <> 1 THEN success% = 0: CLOSE : EXIT SUB
+ELSE
+        CALL openfile("A:\" + detail$(level%, 0), 2, "SO", 148, retry%)
+        IF retry% <> 1 THEN success% = 0: CLOSE : EXIT SUB
+        CALL putseq(2, LTRIM$(RTRIM$(STR$(finum%))), r%)
+        IF retry% <> 1 THEN success% = 0: CLOSE : EXIT SUB
+END IF
+
+RETURN
+
+END SUB
+
+SUB importdb (l%)
+
+IF l% = 4 THEN
+        t% = 43
+ELSEIF l% = 2 THEN
+        t% = 37
+ELSEIF l% = 1 THEN
+        t% = 40
+ELSE
+        t% = 39
+END IF
+CALL cascadecheck(l%, numberofdbs%, filename$, ret%, 1, s%)
+IF s% = 0 THEN GOSUB failedimp: EXIT SUB
+IF ret% <> 0 THEN EXIT SUB
+curname$ = detail$(l%, 1)
+curnum$ = detail$(l%, 0)
+
+RESTORE ImportReady
+READ al$
+CALL alertbox(15, 2, y$)
+IF y$ = "esc" THEN EXIT SUB
+
+g$ = LCASE$(getlevel$(l%, 0, 1))
+IF g$ = "snr branch" THEN g$ = "area"
+file$ = "A:\" + g$ + ".dat"
+
+CALL openfile(file$, 1, "R", 32, retry%)
+IF retry% = 0 THEN GOSUB failedimp: EXIT SUB
+numberofdbs% = LOF(1) / 32
+IF numberofdbs% = 0 THEN
+        RESTORE NoImp
+        READ al$
+        al$ = LEFT$(al$, INSTR(al$, "*") - 1) + getlevel$(l%, 1, 0) + MID$(al$, INSTR(al$, "*") + 1)
+        CALL alertbox(15, 3, y$)
+        EXIT SUB
+END IF
+FOR i% = 1 TO numberofdbs%
+        CALL getrandom(1, 1, i%, retry%)
+        IF retry% = 0 THEN GOSUB failedimp: EXIT SUB
+        a$ = LTRIM$(RTRIM$(decrypt$(agentsinteam.agentname)))
+        b$ = LTRIM$(RTRIM$(decrypt$(agentsinteam.agentnumber)))
+        option$(i%) = a$ + SPACE$(27 - LEN(a$)) + b$ + SPACE$(7 - LEN(b$)) + "|Selects " + a$
+NEXT
+CLOSE #1
+
+option$(0) = "Import " + getlevel$(l%, 0, 0)
+option$(numberofdbs% + 1) = "Previous Menu|Returns To Previous Menu"
+CALL menu(numberofdbs% + 1, selection%, 4, t%, 25, 0)
+IF selection% = numberofdbs% + 1 THEN
+        CALL ruboutmenu(4, t%, numberofdbs% + 1)
+        EXIT SUB
+END IF
+
+CALL checkexist(l%, RTRIM$(LEFT$(option$(selection%), 25)), RTRIM$(RIGHT$(option$(selection%), 7)), exist%, s%)
+IF s% = 0 THEN GOSUB failedimp
+IF exist% <> 0 THEN
+SELECT CASE exist%
+        CASE 1, 3
+        RESTORE ImpExisting
+        READ al$
+        al$ = LEFT$(al$, INSTR(al$, "*") - 1) + getlevel$(l%, 0, 0) + MID$(al$, INSTR(al$, "*") + 1)
+        CALL alertbox(15, 2, yn$)
+        CASE 4, 6
+        RESTORE ImpTerm
+        READ al$
+        al$ = LEFT$(al$, INSTR(al$, "*") - 1) + getlevel$(l%, 0, 0) + MID$(al$, INSTR(al$, "*") + 1)
+        al$ = LEFT$(al$, INSTR(al$, "*") - 1) + getlevel$(l%, 1, 0) + MID$(al$, INSTR(al$, "*") + 1)
+        CALL alertbox(15, 3, yn$)
+        CASE ELSE
+END SELECT
+IF NOT (exist% > 0 AND exist% < 4 AND yn$ = "y") AND exist% <> 0 THEN
+        CALL ruboutmenu(4, t%, numberofdbs% + 1)
+        EXIT SUB
+END IF
+END IF
+
+IF (exist% = 1 OR exist% = 3) AND l% > 1 THEN
+        CALL promptdisplay("Clearing Existing Database - Please Wait...", 20, VAL(MID$(colour$, 25, 2)), VAL(MID$(colour$, 27, 2)), 1)
+        p$ = path$
+        FOR i% = 5 TO l% STEP -1
+                p$ = p$ + detail$(i%, 0) + "\"
+        NEXT
+        p$ = LEFT$(p$, LEN(p$) - 1)
+        IF RIGHT$(p$, 1) = "\" THEN p$ = p$ + RTRIM$(RIGHT$(option$(selection%), 7))
+        CALL nukedir(p$, 1, s%)
+        IF s% = 0 THEN
+                GOSUB failedimp
+                GOTO doneimp
+        END IF
+END IF
+CALL promptdisplay("Importing Database - Please Wait...", 20, VAL(MID$(colour$, 25, 2)), VAL(MID$(colour$, 27, 2)), 1)
+detail$(l%, 1) = ""
+detail$(l%, 0) = ""
+CALL importengine(RTRIM$(MID$(option$(selection%), 28, 7)), s%)
+IF s% = 0 THEN GOSUB failedimp
+IF exist% = 0 OR exist% = 2 OR exist% = 5 THEN
+        p$ = path$
+        FOR i% = 5 TO l% + 1 STEP -1
+                p$ = p$ + detail$(i%, 0) + "\"
+        NEXT
+        name$ = RTRIM$(LEFT$(option$(selection%), 25))
+        num$ = RTRIM$(RIGHT$(option$(selection%), 7))
+        CALL insertagent(l%, name$, num$, s%)
+        g$ = LCASE$(getlevel$(l% + 1, 0, 1))
+        IF g$ = "snr branch" THEN g$ = "area"
+        CALL readconfig(p$ + g$ + ".cfg", dbs%, man1$, man2$, s%)
+        IF s% = 0 THEN GOSUB failedimp: GOTO doneimp
+        CALL writeconfig(p$ + g$ + ".cfg", dbs% + 1, man1$, man2$, s%)
+        IF s% = 0 THEN GOSUB failedimp: GOTO doneimp
+END IF
+doneimp:
+CALL promptdisplay("", 20, 0, 0, 1)
+CALL ruboutmenu(4, t%, numberofdbs% + 1)
+detail$(l%, 1) = curname$
+detail$(l%, 0) = curnum$
+
+EXIT SUB
+
+failedimp:
+CLOSE
+RESTORE UnSuccessful
+READ al$
+CALL alertbox(15, 3, yesorno$)
+RETURN
+
+
+END SUB
+
+SUB importengine (num$, success%)
+
+curyear% = VAL(RIGHT$(DATE$, 4))
+curmonth% = VAL(LEFT$(DATE$, 2))
+success% = 1
+p$ = path$
+FOR i% = 1 TO 6
+        IF detail$(i%, 0) = "" THEN level% = i%
+NEXT
+IF level% = 0 THEN level% = 1
+
+FOR i% = 5 TO level% + 1 STEP -1
+        p$ = p$ + detail$(i%, 0) + "\"
+NEXT
+
+finum% = 1
+CALL openfile("A:\" + num$, 1, "SI", 1, r%)
+IF r% = 0 THEN success% = 0: EXIT SUB
+CALL getseq(1, finum$, 1, r%)
+IF r% = 0 THEN success% = 0: EXIT SUB
+IF VAL(finum$) <> finum% THEN GOSUB wrongdisk
+
+DO
+CALL getseq(1, extension$, 1, r%)
+IF r% = 0 THEN success% = 0: EXIT SUB
+filename$ = p$ + num$ + extension$
+CALL openfile(filename$, 2, "R", 148, r%)
+IF r% = 0 THEN success% = 0: EXIT SUB
+i% = 1
+DO
+        CALL getseq(1, a$, 1, r%)
+        IF a$ = CHR$(255) THEN GOSUB nextfile
+        IF a$ = CHR$(1) THEN CLOSE #1: GOTO donenode2
+        IF r% = 0 THEN success% = 0: CLOSE : EXIT SUB
+        agentweek.wholerecord = a$
+        CALL putrandom(2, 2, i%, r%)
+        IF r% = 0 THEN success% = 0: CLOSE : EXIT SUB
+        i% = i% + 1
+LOOP UNTIL EOF(1)
+GOSUB nextdisk2
+
+CLOSE #2
+y% = y% - 1
+LOOP
+
+donenode2:
+inffile% = 1
+CLOSE #2
+IF level% = 1 THEN EXIT SUB
+CALL openfile("A:\" + num$ + ".inf", 7, "SI", 148, retry%)
+IF retry% <> 1 THEN success% = 0: CLOSE : EXIT SUB
+IF EOF(7) THEN
+        GOSUB nextdisk2
+        IF r% <> 1 THEN success% = 0: CLOSE : EXIT SUB
+END IF
+CALL getseq(7, numberofdbs$, 1, r%)
+IF r% <> 1 THEN success% = 0: CLOSE : EXIT SUB
+numberofdbs% = VAL(numberofdbs$)
+IF EOF(7) THEN
+        GOSUB nextdisk2
+        IF r% <> 1 THEN success% = 0: CLOSE : EXIT SUB
+END IF
+CALL getseq(7, a$, 1, r%)
+IF r% <> 1 THEN success% = 0: CLOSE : EXIT SUB
+IF EOF(7) THEN
+        GOSUB nextdisk2
+        IF r% <> 1 THEN success% = 0: CLOSE : EXIT SUB
+END IF
+CALL getseq(7, b$, 1, r%)
+IF r% <> 1 THEN success% = 0: CLOSE : EXIT SUB
+IF EOF(7) THEN
+        GOSUB nextdisk2
+        IF r% <> 1 THEN success% = 0: CLOSE : EXIT SUB
+END IF
+CALL getseq(7, numberofterms$, 1, r%)
+IF r% <> 1 THEN success% = 0: CLOSE : EXIT SUB
+numberofterms% = VAL(numberofterms$)
+
+g$ = LCASE$(getlevel$(level%, 0, 1))
+IF g$ = "snr branch" THEN g$ = "area"
+IF level% <> 6 THEN
+        CALL makedir(p$ + num$, r%)
+        IF r% = 0 THEN success% = 0: EXIT SUB
+        CALL writeconfig(p$ + num$ + "\" + g$ + ".cfg", numberofdbs%, a$, b$, s%)
+        IF s% = 0 THEN success% = 0: EXIT SUB
+        g$ = LCASE$(getlevel$(level% - 1, 0, 1))
+        IF g$ = "snr branch" THEN g$ = "area"
+        datfile$ = p$ + num$ + "\" + g$ + ".dat"
+ELSE
+        CALL writeconfig(p$ + g$ + ".cfg", numberofdbs%, a$, b$, s%)
+        IF s% = 0 THEN success% = 0: EXIT SUB
+        g$ = LCASE$(getlevel$(level% - 1, 0, 1))
+        IF g$ = "snr branch" THEN g$ = "area"
+        datfile$ = p$ + g$ + ".dat"
+END IF
+n% = numberofdbs% + numberofterms%
+IF n% = 0 THEN EXIT SUB
+
+DIM dbfilenum$(n%)
+
+CALL openfile(datfile$, 1, "R", 32, retry%)
+IF retry% = 0 THEN success% = 0: EXIT SUB
+FOR i% = 1 TO numberofdbs%
+        IF EOF(7) THEN GOSUB nextdisk2
+        CALL getseq(7, db$, 1, retry%)
+        IF retry% = 0 THEN success% = 0: CLOSE : EXIT SUB
+        agentsinteam.agentname = LEFT$(db$, 25)
+        agentsinteam.agentnumber = RIGHT$(db$, 7)
+        dbfilenum$(i%) = LTRIM$(RTRIM$(decrypt$(RIGHT$(db$, 7))))
+        CALL putrandom(1, 1, i%, r%)
+        IF r% = 0 THEN success% = 0: CLOSE : EXIT SUB
+NEXT
+CLOSE #1
+IF numberofterms% > 0 THEN
+        CALL openfile(p$ + "advisert.dat", 1, "R", 32, retry%)
+        IF retry% = 0 THEN CLOSE : EXIT SUB
+        FOR i% = 1 TO numberofterms%
+                IF EOF(7) THEN GOSUB nextdisk2
+                CALL getseq(7, db$, 1, retry%)
+                IF retry% = 0 THEN success% = 0: CLOSE : EXIT SUB
+                agentsinteam.agentname = LEFT$(db$, 25)
+                agentsinteam.agentnumber = RIGHT$(db$, 7)
+                dbfilenum$(i%) = decrypt$(RIGHT$(db$, 7))
+                CALL putrandom(1, 1, i%, r%)
+                IF r% = 0 THEN success% = 0: CLOSE : EXIT SUB
+        NEXT
+        CLOSE #1
+END IF
+CLOSE #7
+
+FOR i% = 1 TO numberofdbs%
+        d$ = detail$(level%, 0)
+        detail$(level%, 0) = num$
+        CALL importengine(dbfilenum$(i%), s%)
+        detail$(level%, 0) = d$
+        IF s% = 0 THEN success% = 0: CLOSE : EXIT SUB
+NEXT
+
+EXIT SUB
+
+nextfile:
+CALL getseq(1, extension$, 1, r%)
+IF r% = 0 THEN success% = 0: EXIT SUB
+IF r% = 2 THEN
+        GOSUB nextdisk2
+END IF
+IF extension$ = CHR$(1) THEN a$ = CHR$(1): RETURN
+filename$ = file$ + extension$
+CLOSE #2
+CALL openfile(filename$, 2, "R", 148, retry%)
+i% = 1
+CALL getseq(1, a$, 1, r%)
+RETURN
+
+nextdisk2:
+IF inffile% = 1 THEN
+        CLOSE #7
+ELSE
+        CLOSE #1
+END IF
+RESTORE DiskSwap2
+READ al$
+al$ = LEFT$(al$, INSTR(al$, "*") - 1) + LTRIM$(RTRIM$(STR$(finum%))) + MID$(al$, INSTR(al$, "*") + 1)
+CALL alertbox(15, 3, y$)
+IF y$ = "esc" THEN CLOSE : success% = 0: EXIT SUB
+finum% = finum% + 1
+IF inffile% = 1 THEN
+        CALL openfile("A:\" + num$ + ".inf", 7, "SI", 148, retry%)
+        IF retry% <> 1 THEN success% = 0: CLOSE : EXIT SUB
+        CALL getseq(1, finum$, 1, r%)
+        IF r% = 0 THEN success% = 0: EXIT SUB
+        IF VAL(finum$) <> finum% THEN GOSUB wrongdisk
+ELSE
+        CALL openfile("A:\" + num$, 1, "SI", 148, retry%)
+        IF retry% <> 1 THEN success% = 0: CLOSE : EXIT SUB
+        CALL getseq(1, finum$, 1, r%)
+        IF r% = 0 THEN success% = 0: EXIT SUB
+        IF VAL(finum$) <> finum% THEN GOSUB wrongdisk
+END IF
+
+RETURN
+
+wrongdisk:
+RESTORE WrongSequence
+READ al$
+al$ = LEFT$(al$, INSTR(al$, "*") - 1) + LTRIM$(RTRIM$(finum$)) + MID$(al$, INSTR(al$, "*") + 1)
+al$ = LEFT$(al$, INSTR(al$, "#") - 1) + LTRIM$(RTRIM$(STR$(finum%))) + MID$(al$, INSTR(al$, "#") + 1)
+CALL alertbox(15, 3, y$)
+IF y$ = "esc" THEN success% = 0: CLOSE : EXIT SUB
+RETURN
+
+END SUB
+
+SUB league (lev%, l%, leaguelevel%, n%, success%)
+
+IF l% = 1 THEN
+        CALL openfile(path$ + "temp", 1, "SO", 1, retry%)
+        IF retry% = 0 THEN success% = 0: EXIT SUB
+END IF
+p$ = path$
+
+FOR i% = 5 TO lev% STEP -1
+        p$ = p$ + detail$(i%, 0) + "\"
+NEXT
+
+g$ = LCASE$(getlevel$(lev%, 0, 1))
+IF g$ = "snr branch" THEN g$ = "area"
+cfgfile$ = p$ + g$ + ".cfg"
+g$ = LCASE$(getlevel$(lev% - 1, 0, 1))
+IF g$ = "snr branch" THEN g$ = "area"
+datfile$ = p$ + g$ + ".dat"
+
+CALL displaysublevels(0, levelpath1$, levelpath2$)
+info$ = detail$(lev%, 1) + "   " + detail$(lev%, 0)
+
+CALL readconfig(cfgfile$, num%, m$, n$, s%)
+IF s% = 0 THEN success% = 0: EXIT SUB
+
+CALL openfile(datfile$, 2, "R", 32, retry%)
+IF retry% = 0 THEN success% = 0: EXIT SUB
+FOR i% = 1 TO num%
+        CALL getrandom(2, 1, i%, retry%)
+        IF retry% = 0 THEN success% = 0: CLOSE : EXIT SUB
+        dbnum$ = RTRIM$(decrypt$(agentsinteam.agentnumber))
+        dbname$ = RTRIM$(decrypt$(agentsinteam.agentname))
+     
+        IF lev% > 1 THEN
+                detail$(lev% - 1, 0) = dbnum$
+                detail$(lev% - 1, 1) = dbname$
+        END IF
+        IF l% = leaguelevel% THEN
+                CALL putseq(1, dbname$, retry%)
+                IF retry% = 0 THEN success% = 0: CLOSE : EXIT SUB
+                CALL putseq(1, dbnum$, retry%)
+                IF retry% = 0 THEN success% = 0: CLOSE : EXIT SUB
+                CALL putseq(1, p$ + dbnum$, retry%)
+                IF retry% = 0 THEN success% = 0: CLOSE : EXIT SUB
+                n% = n% + 1
+        END IF
+        IF lev% > 1 AND l% <> leaguelevel% THEN
+                CLOSE #2: CALL league(lev% - 1, l% + 1, leaguelevel%, n%, s%)
+                IF s% = 0 THEN success% = 0: CLOSE : EXIT SUB
+                CALL openfile(datfile$, 2, "R", 32, retry%)
+                IF retry% = 0 THEN success% = 0: CLOSE : EXIT SUB
+        END IF
+        IF lev% > 1 THEN
+                detail$(lev% - 1, 0) = ""
+                detail$(lev% - 1, 1) = ""
+        END IF
+NEXT
+CLOSE #2
+IF l% = 1 THEN CLOSE #1
+
+END SUB
+
+SUB ltable (startmonth%, endmonth%, startyear%, endyear%)
+
+curyear% = VAL(RIGHT$(DATE$, 4))
+DIM b$(14)
+FOR i% = 1 TO 6
+        IF detail$(i%, 0) = "" THEN l% = i% + 1
+NEXT
+IF l% = 0 THEN l% = 1
+t% = 20
+IF l% = 1 THEN
+        RESTORE OnlyOneAgent
+        READ al$
+        CALL alertbox(15, 2, yn$)
+        EXIT SUB
+END IF
+
+leaguelevel:
+selection% = 0
+IF l% > 2 THEN
+        RESTORE LeagueLevelMenu
+        option$(0) = "League Table"
+        FOR i% = 1 TO l%
+                READ option$(l% - i% + 1)
+        NEXT
+        CALL menu(l%, selection%, 4, t%, 25, 1)
+        leaguelevel% = selection%
+ELSE
+        leaguelevel% = 1
+END IF
+IF selection% <> l% THEN GOTO leaguefield
+
+EXIT SUB
+
+leaguefield:
+RESTORE LeagueTableFields
+option$(0) = "Sort Field"
+FOR i% = 1 TO 15
+        READ option$(i%)
+NEXT
+RESTORE FieldDisplayData2
+FOR i% = 1 TO 13
+        READ b$(i%)
+NEXT
+b$(14) = "Name"
+CALL menu(15, selection%, 4, t%, 25, 1)
+IF selection% <> 15 THEN
+        sortf% = selection%
+        sortf$ = b$(selection%)
+        GOTO extrafield
+ELSEIF selection% = 15 THEN
+        IF l% = 2 THEN EXIT SUB
+        GOTO leaguelevel
+END IF
+
+extrafield:
+RESTORE LeagueTableFields
+option$(0) = "Append Field"
+FOR a% = 1 TO 15
+        READ option$(a%)
+NEXT
+option$(14) = "None|Selects No Extra Field"
+CALL menu(15, selection%, 4, t%, 25, 1)
+IF selection% <> 15 THEN
+        appf% = selection%
+        appf$ = b$(selection%)
+        IF appf$ = "Name" THEN appf$ = "None"
+        GOTO chooseoutput
+ELSEIF selection% = 15 THEN
+        GOTO leaguefield
+END IF
+EXIT SUB
+
+chooseoutput:
+RESTORE LTData
+FOR i% = 1 TO 3
+        READ option$(i%)
+NEXT
+option$(0) = getlevel$(l% - leaguelevel%, 0, 0) + " Table"
+CALL menu(3, selection%, 4, t%, 25, 1)
+sel% = selection%
+IF sel% = 3 THEN
+        GOTO extrafield
+ELSE
+        n% = 0
+        CALL league(l%, 1, leaguelevel%, n%, success%)
+        DIM a$(n%, 4)
+        IF n% = 0 THEN
+                RESTORE NoDataAvailable
+                READ al$
+                CALL alertbox(15, 2, yn$)
+                IF l% <> 2 THEN
+                        ERASE a$
+                        GOTO leaguelevel
+                ELSE
+                        CALL killfile(path$ + "\temp", retry%)
+                        IF retry% = 0 THEN GOTO failedltable
+                        EXIT SUB
+                END IF
+        END IF
+        GOSUB getleaguedata
+        GOSUB sortleague
+        IF sortf$ <> "Name" AND appf$ <> "None" THEN
+                IF longest1% MOD 2 = 1 THEN longest1% = longest1% + 1
+                IF longest2% MOD 2 = 1 THEN longest2% = longest2% + 1
+        ELSE
+                IF longest1% MOD 2 = 0 THEN longest1% = longest1% + 1
+                IF longest2% MOD 2 = 0 THEN longest2% = longest2% + 1
+        END IF
+        FOR i% = 1 TO n%
+                a$(i%, 3) = SPACE$(longest1% - LEN(a$(i%, 3))) + a$(i%, 3)
+                a$(i%, 4) = SPACE$(longest2% - LEN(a$(i%, 4))) + a$(i%, 4)
+        NEXT
+        IF sel% = 1 THEN GOSUB displayleague ELSE GOSUB printleague
+END IF
+EXIT SUB
+
+getleaguedata:
+CALL openfile(path$ + "temp", 1, "SI", 1, retry%)
+IF retry% = 0 THEN GOTO failedltable
+FOR i% = 1 TO n%
+
+CALL getseq(1, name$, 0, retry%)
+IF retry% = 0 THEN GOTO failedltable
+a$(i%, 1) = LTRIM$(RTRIM$(name$))
+CALL getseq(1, num$, 0, retry%)
+IF retry% = 0 THEN GOTO failedltable
+a$(i%, 2) = LTRIM$(RTRIM$(num$))
+a$(i%, 2) = SPACE$(7 - LEN(a$(i%, 2))) + a$(i%, 2)
+
+CALL getseq(1, filename$, 0, retry%)
+IF retry% = 0 THEN GOTO failedltable
+filename$ = filename$ + ".db"
+
+        y% = startyear%
+        DO
+                IF startyear% = endyear% THEN
+                        beginm% = startmonth%: stopm% = endmonth%
+                ELSEIF y% = endyear% THEN
+                        beginm% = 1: stopm% = endmonth%
+                ELSEIF y% = startyear% THEN
+                        beginm% = startmonth%: stopm% = 12
+                ELSE
+                        beginm% = 1: stopm% = 12
+                END IF
+
+                IF y% <> curyear% THEN filename$ = LEFT$(filename$, LEN(filename$) - 2) + LTRIM$(RTRIM$(STR$(y% MOD 100))) ELSE filename$ = LEFT$(filename$, LEN(filename$) - 2) + "db"
+                CALL openfile(filename$, 2, "R", 148, retry%)
+                IF retry% = 0 THEN GOTO failedltable
+                IF LOF(2) = 0 THEN
+                        CLOSE #2
+                        CALL killfile(filename$, retry%)
+                        IF retry% = 0 THEN GOTO failedltable
+                        GOTO endofyear2
+                END IF
+                maxrec% = (LOF(2) / 148) - 12
+                FOR j% = beginm% TO stopm%
+                        CALL getrandom(2, 2, maxrec% + j%, retry%)
+                        IF retry% = 0 THEN GOTO failedltable
+                        r$ = add$(a$(i%, 3), MID$(agentweek.wholerecord, (7 * sortf%) - 6, 7))
+                        a$(i%, 3) = r$
+                        IF appf% <> 14 THEN
+                                r$ = add$(a$(i%, 4), MID$(agentweek.wholerecord, (7 * appf%) - 6, 7))
+                                a$(i%, 4) = r$
+                        END IF
+                NEXT
+                CLOSE #2
+endofyear2:
+                y% = y% + 1
+        LOOP UNTIL y% > endyear%
+NEXT i%
+allempty% = 1
+FOR i% = 1 TO n%
+        IF a$(i%, 3) <> "" OR a$(i%, 4) <> "" THEN allempty% = 0
+NEXT
+IF sortf$ = "Name" AND appf$ = "None" THEN allempty% = 0
+IF allempty% = 1 THEN
+        RESTORE NoDataAvailable
+        READ al$
+        CALL alertbox(15, 2, yn$)
+        CLOSE #1: EXIT SUB
+END IF
+FOR i% = 1 TO n%
+        IF a$(i%, 3) = "" THEN a$(i%, 3) = "0"
+        IF a$(i%, 4) = "" THEN a$(i%, 4) = "0"
+NEXT
+
+CLOSE #1
+CALL killfile(path$ + "\temp", retry%)
+IF retry% = 0 THEN GOTO failedltable
+RETURN
+
+sortleague:
+longest1% = 0
+longest2% = 0
+IF n% = 1 THEN
+        longest1% = LEN(a$(1, 3))
+        longest2% = LEN(a$(1, 4))
+        RETURN
+END IF
+IF sortf$ = "Name" THEN
+
+sortalph:
+        i% = 1
+        done% = 0
+
+        DO
+        IF INSTR(a$(i%, 1), " ") > 0 AND (l% < 3) THEN
+                aname$ = UCASE$(MID$(a$(i%, 1), (INSTR(a$(i%, 1), " ") + 1)))
+        ELSE
+                aname$ = UCASE$(a$(i%, 1))
+        END IF
+        IF INSTR(a$(i% + 1, 1), " ") > 0 AND (l% < 3) THEN
+                bname$ = UCASE$(MID$(a$(i% + 1, 1), (INSTR(a$(i% + 1, 1), " ") + 1)))
+        ELSE
+                bname$ = UCASE$(a$(i% + 1, 1))
+        END IF
+      
+        IF aname$ > bname$ THEN
+                FOR j% = 1 TO 4
+                        SWAP a$(i%, j%), a$(i% + 1, j%)
+                NEXT
+                done% = 1
+        ELSEIF UCASE$(a$(i%, 1)) > UCASE$(a$(i% + 1, 1)) THEN
+                FOR j% = 1 TO 4
+                        SWAP a$(i%, j%), a$(i% + 1, j%)
+                NEXT
+                done% = 1
+        END IF
+        i% = i% + 1
+        LOOP UNTIL i% = n%
+        IF done% = 1 THEN GOTO sortalph
+ELSE
+sortnum:
+        i% = 1
+        done% = 0
+        DO
+        IF VAL(a$(i% + 1, 3)) > VAL(a$(i%, 3)) THEN
+                FOR j% = 1 TO 4
+                        SWAP a$(i%, j%), a$(i% + 1, j%)
+                NEXT
+                done% = 1
+        END IF
+        i% = i% + 1
+        LOOP UNTIL i% = n%
+        IF done% = 1 THEN GOTO sortnum
+END IF
+FOR i% = 1 TO n%
+        IF LEN(a$(i%, 3)) > longest1% THEN longest1% = LEN(a$(i%, 3))
+        IF LEN(a$(i%, 4)) > longest2% THEN longest2% = LEN(a$(i%, 4))
+NEXT
+RETURN
+
+displayleague:
+CLS
+i% = 1
+num% = n%
+IF num% < 14 THEN
+        m% = 1
+ELSE
+        IF num% MOD 13 <> 0 THEN
+                m% = INT(num% / 13) + 1
+        ELSE
+                m% = INT(num% / 13)
+        END IF
+        n% = 13
+END IF
+IF sortf$ = "Name" AND appf$ <> "None" THEN
+        info$ = "Alphabetical " + getlevel$(l% - leaguelevel%, 0, 0) + " League Table Showing " + appf$
+ELSEIF sortf$ = "Name" AND appf$ = "None" THEN
+        info$ = "Current " + getlevel$(l% - leaguelevel%, 0, 0) + " List"
+ELSEIF appf$ <> "None" AND sortf$ <> "Name" THEN
+        info$ = getlevel$(l% - leaguelevel%, 0, 0) + " League Table by " + sortf$ + " Showing " + appf$
+ELSE
+        info$ = getlevel$(l% - leaguelevel%, 0, 0) + " League Table by " + sortf$
+END IF
+CALL promptdisplay(info$, 2, 15, 0, 1)
+LOCATE 1, 73: PRINT "ACTIVITY";
+CALL displaysublevels(0, levelpath1$, levelpath2$)
+CALL promptdisplay(levelpath1$, 3, 15, 0, 1)
+CALL promptdisplay(levelpath2$, 4, 15, 0, 1)
+FOR b% = 1 TO m%
+c% = 1
+FOR j% = 6 TO 22
+        CALL promptdisplay("", j%, 0, 0, 1)
+NEXT
+IF appf$ <> "None" AND sortf$ <> "Name" THEN
+        LOCATE 6, 3: PRINT CHR$(201); STRING$(36, 205); CHR$(209); STRING$(18, 205); CHR$(209); STRING$(18, 205); CHR$(187)
+        LOCATE 7, 3: PRINT CHR$(186): LOCATE 7, 40: PRINT CHR$(179): LOCATE 7, 59: PRINT CHR$(179): LOCATE 7, 78: PRINT CHR$(186)
+        LOCATE 8, 3: PRINT CHR$(199); STRING$(36, 196); CHR$(197); STRING$(18, 196); CHR$(197); STRING$(18, 196); CHR$(182)
+        LOCATE 7, 3 + (36 - LEN(getlevel$(l% - leaguelevel%, 0, 0) + "  Name  &  Number")) / 2
+        PRINT getlevel$(l% - leaguelevel%, 0, 0) + "  Name  &  Number"
+        LOCATE 7, 41 + (18 - LEN(sortf$)) / 2
+        PRINT sortf$
+        LOCATE 7, 60 + (18 - LEN(appf$)) / 2
+        PRINT appf$
+        IF b% = m% THEN
+                n% = num%
+        ELSE
+                n% = 13 * (b% - 1) + 13
+        END IF
+        FOR a% = 1 + ((b% - 1) * 13) TO n%
+                c% = c% + 1
+                LOCATE c% + 7, 3: PRINT CHR$(186): LOCATE c% + 7, 40: PRINT CHR$(179): LOCATE c% + 7, 59: PRINT CHR$(179): LOCATE c% + 7, 78: PRINT CHR$(186)
+                LOCATE c% + 7, 5: PRINT a$(i%, 1): LOCATE c% + 7, 32: PRINT a$(i%, 2)
+                LOCATE c% + 7, 41 + (18 - LEN(a$(i%, 3))) / 2: PRINT a$(i%, 3)
+                LOCATE c% + 7, 60 + (18 - LEN(a$(i%, 4))) / 2: PRINT a$(i%, 4)
+                i% = i% + 1
+        NEXT
+        LOCATE c% + 8, 1: PRINT "  "; CHR$(200); STRING$(36, 205); CHR$(207); STRING$(18, 205); CHR$(207); STRING$(18, 205); CHR$(188)
+ELSEIF sortf$ = "Name" AND appf$ = "None" THEN
+        LOCATE 6, 3: PRINT CHR$(201); STRING$(36, 205); CHR$(209); STRING$(37, 205); CHR$(187)
+        LOCATE 7, 3: PRINT CHR$(186): LOCATE 7, 40: PRINT CHR$(179): LOCATE 7, 78: PRINT CHR$(186)
+        LOCATE 8, 3: PRINT CHR$(199); STRING$(36, 196); CHR$(197); STRING$(37, 196); CHR$(182)
+        LOCATE 7, 3 + (36 - LEN(getlevel$(l% - leaguelevel%, 0, 0) + " Name")) / 2
+        PRINT getlevel$(l%, 0, 0) + " Name"
+        LOCATE 7, 41 + (37 - LEN(getlevel$(l% - leaguelevel%, 0, 0) + " Number")) / 2
+        PRINT getlevel$(l%, 0, 0) + " Number"
+        IF b% = m% THEN
+                n% = num%
+        ELSE
+                n% = 13 * (b% - 1) + 13
+        END IF
+        FOR a% = 1 + ((b% - 1) * 13) TO n%
+                c% = c% + 1
+                LOCATE c% + 7, 3: PRINT CHR$(186): LOCATE c% + 7, 40: PRINT CHR$(179): LOCATE c% + 7, 78: PRINT CHR$(186)
+                LOCATE c% + 7, 3 + (36 - LEN(a$(i%, 1))) / 2: PRINT a$(i%, 1)
+                LOCATE c% + 7, 41 + (37 - LEN(a$(i%, 2))) / 2: PRINT a$(i%, 2)
+                i% = i% + 1
+        NEXT
+        LOCATE c% + 8, 1: PRINT "  "; CHR$(200); STRING$(36, 205); CHR$(207); STRING$(37, 205); CHR$(188)
+ELSEIF sortf$ <> "Name" AND appf$ = "None" THEN
+        LOCATE 6, 3: PRINT CHR$(201); STRING$(36, 205); CHR$(209); STRING$(37, 205); CHR$(187)
+        LOCATE 7, 3: PRINT CHR$(186): LOCATE 7, 40: PRINT CHR$(179): LOCATE 7, 78: PRINT CHR$(186)
+        LOCATE 8, 3: PRINT CHR$(199); STRING$(36, 196); CHR$(197); STRING$(37, 196); CHR$(182)
+        LOCATE 7, 3 + (36 - LEN(getlevel$(l% - leaguelevel%, 0, 0) + "  Name  &  Number")) / 2
+        PRINT getlevel$(l% - leaguelevel%, 0, 0) + "  Name  &  Number"
+        LOCATE 7, 41 + (37 - LEN(sortf$)) / 2
+        PRINT sortf$
+        IF b% = m% THEN
+                n% = num%
+        ELSE
+                n% = 13 * (b% - 1) + 13
+        END IF
+        FOR a% = 1 + ((b% - 1) * 13) TO n%
+                c% = c% + 1
+                LOCATE c% + 7, 3: PRINT CHR$(186): LOCATE c% + 7, 40: PRINT CHR$(179): LOCATE c% + 7, 78: PRINT CHR$(186)
+                LOCATE c% + 7, 5: PRINT a$(i%, 1): LOCATE c% + 7, 32: PRINT a$(i%, 2)
+                LOCATE c% + 7, 41 + (37 - LEN(a$(i%, 3))) / 2: PRINT a$(i%, 3)
+                i% = i% + 1
+        NEXT
+        LOCATE c% + 8, 1: PRINT "  "; CHR$(200); STRING$(36, 205); CHR$(207); STRING$(37, 205); CHR$(188)
+ELSE
+        LOCATE 6, 3: PRINT CHR$(201); STRING$(36, 205); CHR$(209); STRING$(37, 205); CHR$(187)
+        LOCATE 7, 3: PRINT CHR$(186): LOCATE 7, 40: PRINT CHR$(179): LOCATE 7, 78: PRINT CHR$(186)
+        LOCATE 8, 3: PRINT CHR$(199); STRING$(36, 196); CHR$(197); STRING$(37, 196); CHR$(182)
+        LOCATE 7, 3 + (36 - LEN(getlevel$(l% - leaguelevel%, 0, 0) + "  Name  &  Number")) / 2
+        PRINT getlevel$(l% - leaguelevel%, 0, 0) + "  Name  &  Number"
+        LOCATE 7, 41 + (37 - LEN(appf$)) / 2
+        PRINT appf$
+        IF b% = m% THEN
+                n% = num%
+        ELSE
+                n% = 13 * (b% - 1) + 13
+        END IF
+        FOR a% = 1 + ((b% - 1) * 13) TO n%
+                c% = c% + 1
+                LOCATE c% + 7, 3: PRINT CHR$(186): LOCATE c% + 7, 40: PRINT CHR$(179): LOCATE c% + 7, 78: PRINT CHR$(186)
+                LOCATE c% + 7, 5: PRINT a$(i%, 1): LOCATE c% + 7, 32: PRINT a$(i%, 2)
+                LOCATE c% + 7, 41 + (37 - LEN(a$(i%, 4))) / 2: PRINT a$(i%, 4)
+                i% = i% + 1
+        NEXT
+        LOCATE c% + 8, 1: PRINT "  "; CHR$(200); STRING$(36, 205); CHR$(207); STRING$(37, 205); CHR$(188)
+END IF
+IF b% < m% THEN
+        CALL promptdisplay("Space Bar for More, Esc for Main Menu", 24, 15, 0, 1)
+getkey2:
+        key$ = INKEY$
+        IF key$ = "" THEN GOTO getkey2
+        IF ASC(key$) = 27 THEN CLOSE #1: CLS : RETURN
+        IF key$ <> " " THEN GOTO getkey2
+ELSE
+        CALL promptdisplay("Any Key for Main Menu", 24, 15, 0, 1)
+END IF
+NEXT
+CLOSE #1
+DO
+        k$ = INKEY$
+LOOP UNTIL k$ <> ""
+CLS
+RETURN
+
+printleague:
+i% = 1
+extra% = 2
+page% = 1
+IF n% / 45 = INT(n% / 45) THEN maxpage% = n% / 45 ELSE maxpage% = INT(n% / 45) + 1
+IF n% < 45 THEN maxpage% = 1
+IF sortf$ = "Name" AND appf$ <> "None" THEN
+        info$ = "Alphabetical " + getlevel$(l% - leaguelevel%, 0, 0) + " League Table Showing " + appf$
+ELSEIF sortf$ = "Name" AND appf$ = "None" THEN
+        info$ = "Current " + getlevel$(l% - leaguelevel%, 0, 0) + " List"
+ELSEIF appf$ <> "None" THEN
+        info$ = getlevel$(l% - leaguelevel%, 0, 0) + " League Table by " + sortf$ + " Showing " + appf$
+ELSE
+        info$ = getlevel$(l% - leaguelevel%, 0, 0) + " League Table by " + sortf$
+END IF
+CALL checkprinter(retry%)
+IF retry% = 1 THEN
+CALL promptdisplay("Printing " + getlevel$(l% - leaguelevel%, 0, 0) + " League Table...", 20, 31, 0, 1)
+LPRINT CHR$(27); "6";
+GOSUB HeaderPrint3
+
+newpage3:
+DO
+IF appf$ <> "None" AND sortf$ <> "Name" THEN
+        s% = 25 - LEN(RTRIM$(LTRIM$(a$(i%, 1))))
+        r% = 7 - LEN(RTRIM$(LTRIM$(a$(i%, 2))))
+        q% = 18 - LEN(RTRIM$(LTRIM$(a$(i%, 3)))) + 1
+        p% = 17 - LEN(RTRIM$(LTRIM$(a$(i%, 4)))) + 1
+        LPRINT SPACE$(2); CHR$(186); " "; RTRIM$(LTRIM$(a$(i%, 1))); SPACE$(s%);
+        LPRINT SPACE$(3); SPACE$(r%); RTRIM$(LTRIM$(a$(i%, 2))); " ";
+        LPRINT CHR$(179); SPACE$(q% / 2); LTRIM$(RTRIM$(a$(i%, 3))); SPACE$(18 - q% / 2 - LEN(RTRIM$(LTRIM$(a$(i%, 3)))));
+        LPRINT CHR$(179); SPACE$(p% / 2); LTRIM$(RTRIM$(a$(i%, 4))); SPACE$(17 - p% / 2 - LEN(RTRIM$(LTRIM$(a$(i%, 4))))); CHR$(186); SPACE$(2);
+ELSEIF sortf$ = "Name" AND appf$ = "None" THEN
+        s% = 37 - LEN(RTRIM$(LTRIM$(a$(i%, 1)))) + 1
+        r% = 36 - LEN(RTRIM$(LTRIM$(a$(i%, 2)))) + 1
+        LPRINT SPACE$(2); CHR$(186); SPACE$(s% / 2); RTRIM$(LTRIM$(a$(i%, 1))); SPACE$(37 - s% / 2 - LEN(RTRIM$(LTRIM$(a$(i%, 1))))); CHR$(179); SPACE$(r% / 2); LTRIM$(RTRIM$(a$(i%, 2))); SPACE$(36 - r% / 2 - LEN(RTRIM$(LTRIM$(a$(i%, 2))))); CHR$( _
+186); SPACE$(2);
+        extra% = 0
+ELSEIF sortf$ <> "Name" THEN
+        s% = 25 - LEN(RTRIM$(LTRIM$(a$(i%, 1))))
+        r% = 7 - LEN(RTRIM$(LTRIM$(a$(i%, 2))))
+        q% = 36 - LEN(RTRIM$(LTRIM$(a$(i%, 3)))) + 1
+        LPRINT SPACE$(2); CHR$(186); " "; RTRIM$(LTRIM$(a$(i%, 1))); SPACE$(s%);
+        LPRINT SPACE$(3); SPACE$(r%); RTRIM$(LTRIM$(a$(i%, 2))); " ";
+        LPRINT CHR$(179); SPACE$(q% / 2); LTRIM$(RTRIM$(a$(i%, 3))); SPACE$(36 - q% / 2 - LEN(RTRIM$(LTRIM$(a$(i%, 3))))); CHR$(186); SPACE$(2);
+ELSE
+        s% = 25 - LEN(RTRIM$(LTRIM$(a$(i%, 1))))
+        r% = 7 - LEN(RTRIM$(LTRIM$(a$(i%, 2))))
+        q% = 36 - LEN(RTRIM$(LTRIM$(a$(i%, 4)))) + 1
+        LPRINT SPACE$(2); CHR$(186); " "; RTRIM$(LTRIM$(a$(i%, 1))); SPACE$(s%);
+        LPRINT SPACE$(3); SPACE$(r%); RTRIM$(LTRIM$(a$(i%, 2))); " ";
+        LPRINT CHR$(179); SPACE$(q% / 2); LTRIM$(RTRIM$(a$(i%, 4))); SPACE$(36 - q% / 2 - LEN(RTRIM$(LTRIM$(a$(i%, 4))))); CHR$(186); SPACE$(2);
+END IF
+i% = i% + 1
+LOOP UNTIL i% > n% OR (i% MOD 45 = 0 AND page% <= maxpage%)
+LPRINT "  "; CHR$(200); STRING$(74, 205); CHR$(188); "  ";
+IF (i% MOD 45) <> 0 THEN
+        FOR z% = 1 TO 48 - (i% MOD 45) - extra%
+                LPRINT CHR$(13);
+        NEXT
+ELSE
+        LPRINT CHR$(13); CHR$(13); CHR$(13);
+END IF
+
+IF maxpage% > 1 THEN
+        LPRINT SPACE$(2); MID$(DATE$, 4, 2); "/"; LEFT$(DATE$, 2); "/"; RIGHT$(DATE$, 4); SPACE$(59); LTRIM$(STR$(page%)); SPACE$(9 - LEN(LTRIM$(STR$(page%))));
+ELSE
+        LPRINT SPACE$(2); MID$(DATE$, 4, 2); "/"; LEFT$(DATE$, 2); "/"; RIGHT$(DATE$, 4); SPACE$(68);
+END IF
+LPRINT CHR$(12);
+
+IF i% <= n% THEN
+        GOSUB HeaderPrint3
+        page% = page% + 1: GOTO newpage3
+END IF
+CALL promptdisplay("", 20, 0, 0, 1)
+
+END IF
+RETURN
+
+HeaderPrint3:
+
+LPRINT CHR$(13); CHR$(13); CHR$(13); CHR$(13);
+LPRINT SPACE$(63); "ษออออออออออป"
+LPRINT SPACE$(63); "บ ACTIVITY บ"
+LPRINT SPACE$(63); "ศออออออออออผ"
+LPRINT CHR$(13);
+LPRINT SPACE$((80 - LEN(info$)) / 2 + 1); info$
+LPRINT CHR$(13);
+CALL displaysublevels(0, levelpath1$, levelpath2$)
+IF levelpath2$ <> "" THEN
+        LPRINT SPACE$((80 - LEN(levelpath1$) - LEN(levelpath2$) - 3) / 2); levelpath1$ + " - " + levelpath2$;
+ELSE
+        LPRINT SPACE$((80 - LEN(levelpath1$)) / 2); levelpath1$;
+END IF
+LPRINT CHR$(13); CHR$(13); CHR$(13);
+LPRINT "  "; CHR$(201); STRING$(74, 205); CHR$(187); "  ";
+
+IF appf$ <> "None" AND sortf$ <> "Name" THEN
+        s% = 37 - LEN(RTRIM$(LTRIM$(getlevel$(l% - leaguelevel%, 0, 0) + " Name  &  Number"))) + 1
+        r% = 18 - LEN(RTRIM$(LTRIM$(sortf$))) + 1
+        q% = 17 - LEN(RTRIM$(LTRIM$(appf$))) + 1
+        LPRINT SPACE$(2); CHR$(186); SPACE$(s% / 2); RTRIM$(LTRIM$(getlevel$(l% - leaguelevel%, 0, 0) + " Name  &  Number")); SPACE$(37 - s% / 2 - LEN(RTRIM$(LTRIM$(getlevel$(l% - leaguelevel%, 0, 0) + " Name  &  Number")))); CHR$(179); SPACE$(r% /  _
+2); LTRIM$(RTRIM$(sortf$)); SPACE$(18 - r% / 2 - LEN(RTRIM$(LTRIM$(sortf$)))); CHR$(179); SPACE$(q% / 2); LTRIM$(RTRIM$(appf$)); SPACE$(17 - q% / 2 - LEN(RTRIM$(LTRIM$(appf$)))); CHR$(186); SPACE$(2);
+        LPRINT "  " + CHR$(199); STRING$(74, 196); CHR$(182); "  ";
+ELSEIF sortf$ <> "Name" AND appf$ = "None" THEN
+        s% = 37 - LEN(RTRIM$(LTRIM$(getlevel$(l% - leaguelevel%, 0, 0) + " Name  &  Number"))) + 1
+        r% = 36 - LEN(RTRIM$(LTRIM$(sortf$))) + 1
+        LPRINT SPACE$(2); CHR$(186); SPACE$(s% / 2); RTRIM$(LTRIM$(getlevel$(l% - leaguelevel%, 0, 0) + " Name  &  Number")); SPACE$(37 - s% / 2 - LEN(RTRIM$(LTRIM$(getlevel$(l% - leaguelevel%, 0, 0) + " Name  &  Number")))); CHR$(179); SPACE$(r% /  _
+2); LTRIM$(RTRIM$(sortf$)); SPACE$(36 - r% / 2 - LEN(RTRIM$(LTRIM$(sortf$)))); CHR$(186); SPACE$(2);
+        LPRINT "  " + CHR$(199); STRING$(74, 196); CHR$(182); "  ";
+ELSEIF sortf$ = "Name" AND appf$ <> "None" THEN
+        s% = 37 - LEN(RTRIM$(LTRIM$(getlevel$(l% - leaguelevel%, 0, 0) + " Name  &  Number"))) + 1
+        r% = 36 - LEN(RTRIM$(LTRIM$(appf$))) + 1
+        LPRINT SPACE$(2); CHR$(186); SPACE$(s% / 2); RTRIM$(LTRIM$(getlevel$(l% - leaguelevel%, 0, 0) + " Name  &  Number")); SPACE$(37 - s% / 2 - LEN(RTRIM$(LTRIM$(getlevel$(l% - leaguelevel%, 0, 0) + " Name  &  Number")))); CHR$(179); SPACE$(r% /  _
+2); LTRIM$(RTRIM$(appf$)); SPACE$(36 - r% / 2 - LEN(RTRIM$(LTRIM$(appf$)))); CHR$(186); SPACE$(2);
+        LPRINT "  " + CHR$(199); STRING$(74, 196); CHR$(182); "  ";
+END IF
+
+RETURN
+
+failedltable:
+CLOSE
+RESTORE UnSuccessful
+READ al$
+CALL alertbox(15, 3, yn$)
+
+END SUB
+
+SUB makeagent (l%, name$, num$, success%)
+
+p$ = path$
+success% = 1
+
+FOR i% = 5 TO l% + 1 STEP -1
+        p$ = p$ + detail$(i%, 0) + "\"
+NEXT
+
+g$ = LCASE$(getlevel$(l% + 1, 0, 1))
+IF g$ = "snr branch" THEN g$ = "area"
+CALL readconfig(p$ + g$ + ".cfg", numberofdbs%, man1$, man2$, s%)
+IF s% = 0 THEN success% = 0: EXIT SUB
+g$ = LCASE$(getlevel$(l%, 0, 1))
+IF g$ = "snr branch" THEN g$ = "area"
+file$ = p$ + g$ + ".dat"
+
+CALL insertagent(l%, name$, num$, s%)
+
+curyear% = VAL(RIGHT$(DATE$, 4))
+curmonth% = VAL(LEFT$(DATE$, 2))
+file$ = p$ + num$ + ".db"
+CALL openfile(file$, 2, "R", 148, retry%)
+IF retry% = 0 THEN success% = 0: EXIT SUB
+y$ = LTRIM$(STR$(curyear%))
+FOR i% = 1 TO curmonth%
+        FOR j% = 1 TO 5
+                m$ = LTRIM$(STR$(i%)): IF LEN(m$) = 1 THEN m$ = m$ + " "
+                whole$ = y$ + m$ + LTRIM$(STR$(j%))
+                agentweek.wholerecord = whole$ + SPACE$(141)
+                rec% = (i% - 1) * 5 + j%
+                CALL putrandom(2, 2, rec%, retry%)
+                IF retry% = 0 THEN success% = 0: CLOSE #2: EXIT SUB
+        NEXT
+NEXT
+rec% = curmonth% * 5
+
+FOR i% = 1 TO 12
+        agentweek.wholerecord = SPACE$(148)
+        CALL putrandom(2, 2, rec% + i%, retry%)
+        IF retry% = 0 THEN success% = 0: CLOSE #2: EXIT SUB
+NEXT
+
+CLOSE #2
+
+IF l% > 1 THEN
+        CALL makedir(p$ + num$, retry%)
+        IF retry% = 0 THEN success% = 0: CLOSE #2: EXIT SUB
+        g$ = LCASE$(getlevel$(l%, 0, 1))
+        IF g$ = "snr branch" THEN g$ = "area"
+        CALL writeconfig(p$ + num$ + "\" + g$ + ".cfg", 0, "", "", s%)
+        IF s% = 0 THEN success% = 0: CLOSE #2: EXIT SUB
+END IF
+
+g$ = LCASE$(getlevel$(l% + 1, 0, 1))
+IF g$ = "snr branch" THEN g$ = "area"
+CALL writeconfig(p$ + g$ + ".cfg", numberofdbs% + 1, man1$, man2$, s%)
+
+END SUB
+
+SUB nukedir (dir$, dir%, success%)
+
+success% = 1
+IF RIGHT$(dir$, 1) = ":" THEN d$ = dir$ + "\" ELSE d$ = dir$
+
+CALL openfile(dir$ + "\$$$$$$$$.$$$", 1, "R", 1, retry%)
+IF retry% = 0 THEN success% = 0: EXIT SUB
+CLOSE #1
+SHELL "DIR " + d$ + " > DIR" + LTRIM$(STR$(dir%)) + ".$$$"
+CALL openfile("DIR" + LTRIM$(STR$(dir%)) + ".$$$", 1, "SI", 1, retry%)
+IF retry% = 0 THEN success% = 0: EXIT SUB
+DO
+        CALL getseq(1, a$, 1, retry%)
+        IF retry% = 0 THEN success% = 0: CLOSE #1: EXIT SUB
+        a$ = UCASE$(a$)
+LOOP UNTIL INSTR(a$, " FILE(S) ") <> 0 OR EOF(1)
+
+IF INSTR(a$, " FILE(S) ") = 0 THEN
+        CLOSE #1
+        CALL killfile("DIR" + LTRIM$(STR$(dir%)) + ".$$$", retry%)
+        IF retry% = 0 THEN success% = 0: EXIT SUB
+        IF RIGHT$(d$, 2) <> ":\" THEN CALL remdir(d$, retry%)
+        IF retry% = 0 THEN success% = 0: EXIT SUB
+        EXIT SUB
+END IF
+
+i% = 1
+DO
+        f$ = LEFT$(a$, i%)
+        i% = i% + 1
+LOOP UNTIL RIGHT$(f$, 1) = " "
+file% = VAL(LEFT$(f$, LEN(f$) - 1))
+DIM line$(file% + 8)
+CLOSE #1
+CALL openfile("DIR" + LTRIM$(STR$(dir%)) + ".$$$", 1, "SI", 1, retry%)
+IF retry% = 0 THEN success% = 0: EXIT SUB
+l% = 1
+m% = mouse%
+DO
+        mouse% = 2
+        CALL getseq(1, l$, 1, retry%)
+        mouse% = m%
+        IF retry% = 0 THEN success% = 0: CLOSE #1: EXIT SUB
+        line$(l%) = UCASE$(l$)
+        l% = l% + 1
+LOOP UNTIL EOF(1)
+CLOSE #1
+j% = l%
+l% = 1
+DO
+        IF LEN(line$(l%)) > 0 THEN
+                IF INSTR(line$(l%), "<DIR>") <> 0 AND LEFT$(line$(l%), 1) <> " " THEN
+                        subdir$ = RTRIM$(LEFT$(line$(l%), 8) + "." + MID$(line$(l%), 10, 2))
+                        IF RIGHT$(subdir$, 1) = "." THEN subdir$ = RTRIM$(LEFT$(subdir$, 8))
+                        subdir$ = LTRIM$(RTRIM$(subdir$))
+                        IF subdir$ <> "." AND subdir$ <> ".." THEN
+                                CALL nukedir(dir$ + "\" + subdir$, dir% + 1, s%)
+                                IF s% = 0 THEN success% = 0: EXIT SUB
+                        END IF
+                ELSEIF LEFT$(line$(l%), 1) <> " " THEN
+                        file$ = LTRIM$(RTRIM$(LEFT$(line$(l%), 8)) + "." + LTRIM$(RTRIM$(MID$(line$(l%), 10, 3))))
+                        IF RIGHT$(file$, 1) = "." THEN file$ = RTRIM$(LEFT$(file$, 8))
+                        IF file$ <> "DIR" + LTRIM$(STR$(dir%)) + ".$$$" THEN
+                                CALL killfile(dir$ + "\" + file$, retry%)
+                                IF retry% = 0 THEN success% = 0: EXIT SUB
+                        END IF
+                END IF
+        END IF
+        l% = l% + 1
+LOOP UNTIL l% = j%
+CALL killfile("DIR" + LTRIM$(STR$(dir%)) + ".$$$", retry%)
+IF retry% = 0 THEN success% = 0: EXIT SUB
+IF RIGHT$(d$, 2) <> ":\" THEN CALL remdir(d$, retry%)
+IF retry% = 0 THEN success% = 0
+
+END SUB
+
+SUB readconfig (filename$, numberofdbs%, managername$, managernum$, success%)
+
+success% = 1
+CALL openfile(filename$, 8, "SI", 1, retry%)
+IF retry% = 0 THEN success% = 0: EXIT SUB
+CALL getseq(8, numberofdbs$, 0, retry%)
+IF retry% = 0 THEN success% = 0: CLOSE #8: EXIT SUB
+CALL getseq(8, managername$, 0, retry%)
+IF retry% = 0 THEN success% = 0: CLOSE #8: EXIT SUB
+CALL getseq(8, managernum$, 0, retry%)
+IF retry% = 0 THEN success% = 0: CLOSE #8: EXIT SUB
+CLOSE #8
+numberofdbs% = VAL(numberofdbs$)
+
+END SUB
+
+SUB updateconfig (success%)
+
+success% = 1
+CALL openfile("activity.cfg", 8, "SO", 1, retry%)
+IF retry% = 0 THEN success% = 0:  EXIT SUB
+CALL putseq(8, colour$, retry%)
+IF retry% = 0 THEN success% = 0: CLOSE #8: EXIT SUB
+CALL putseq(8, DATE$, retry%)
+IF retry% = 0 THEN success% = 0: CLOSE #8: EXIT SUB
+CALL putseq(8, path$, retry%)
+IF retry% = 0 THEN success% = 0: CLOSE #8: EXIT SUB
+CLOSE #8
+
+END SUB
+
+SUB updatedbrecnum (filename$, success%)
+
+success% = 1
+curyear% = VAL(RIGHT$(DATE$, 4))
+curmonth% = VAL(LEFT$(DATE$, 2))
+
+DIM monthlyrecord$(12)
+quit% = 0
+
+CALL openfile(filename$, 2, "R", 148, retry%)
+IF retry% = 0 THEN success% = 0: EXIT SUB
+recsgot% = LOF(2) / 148
+
+CALL getrandom(2, 2, 1, retry%)
+IF retry% = 0 THEN success% = 0: CLOSE #2: EXIT SUB
+firsty% = VAL(LEFT$(agentweek.wholerecord, 4))
+recsneeded% = ((curyear% - firsty%) * 60) + (curmonth% * 5) + 12
+IF recsneeded% <= recsgot% THEN CLOSE #2: EXIT SUB
+
+FOR i% = 1 TO 12
+        CALL getrandom(2, 2, recsgot% - 12 + i%, retry%)
+        IF retry% = 0 THEN success% = 0: CLOSE #2: EXIT SUB
+        monthlyrecord$(i%) = agentweek.wholerecord
+NEXT
+
+CALL getrandom(2, 2, recsgot% - 12, retry%)
+IF retry% = 0 THEN success% = 0: CLOSE #2: EXIT SUB
+y% = VAL(LEFT$(agentweek.wholerecord, 4))
+m% = VAL(LTRIM$(RTRIM$(MID$(agentweek.wholerecord, 5, 2))))
+rec% = recsgot% - 11
+
+m% = m% + 1: IF m% > 12 THEN GOTO endofyear
+DO
+y$ = LTRIM$(STR$(y%))
+m$ = LTRIM$(STR$(m%)): IF LEN(m$) = 1 THEN m$ = m$ + " "
+FOR i% = 1 TO 5
+        w$ = LTRIM$(STR$(i%))
+        whole$ = y$ + m$ + w$
+        agentweek.wholerecord = whole$ + SPACE$(148 - LEN(whole$))
+        CALL putrandom(2, 2, rec%, retry%)
+        IF retry% = 0 THEN success% = 0: CLOSE #2: EXIT SUB
+        rec% = rec% + 1
+NEXT
+m% = m% + 1
+IF m% > 12 THEN
+        FOR i% = 1 TO 12
+                agentweek.wholerecord = monthlyrecord$(i%)
+                CALL putrandom(2, 2, rec% + i% - 1, retry%)
+                IF retry% = 0 THEN success% = 0: CLOSE #2: EXIT SUB
+        NEXT
+endofyear:
+        CLOSE #2
+        IF NOT ((curmonth% = 12 AND m% = 13) AND (y% = curyear%)) THEN
+                CALL rename(filename$, LEFT$(filename$, LEN(filename$) - 2) + LTRIM$(STR$(y% MOD 100)), retry%)
+        END IF
+
+        FOR i% = 1 TO 12
+                monthlyrecord$(i%) = SPACE$(148)
+        NEXT
+        m% = 1: y% = y% + 1
+END IF
+
+IF (curmonth% = 12 AND m% = 1) AND (y% > curyear%) THEN quit% = 1
+IF quit% <> 1 AND m% = 1 THEN
+        CALL openfile(filename$, 2, "R", 148, retry%): rec% = 1
+        IF retry% = 0 THEN success% = 0: EXIT SUB
+END IF
+LOOP UNTIL quit% = 1 OR (y% = curyear% AND m% > curmonth%)
+
+rec% = (curmonth% * 5)
+IF quit% <> 1 THEN
+        FOR i% = 1 TO 12
+                agentweek.wholerecord = monthlyrecord$(i%)
+                CALL putrandom(2, 2, rec% + i%, retry%)
+                IF retry% = 0 THEN success% = 0: CLOSE #2: EXIT SUB
+        NEXT
+END IF
+
+CLOSE #2
+
+END SUB
+
+SUB writeconfig (filename$, numberofdbs%, managername$, managernum$, success%)
+
+success% = 1
+CALL openfile(filename$, 8, "SO", 1, retry%)
+IF retry% = 0 THEN success% = 0: EXIT SUB
+CALL putseq(8, STR$(numberofdbs%), retry%)
+IF retry% = 0 THEN success% = 0: CLOSE #8: EXIT SUB
+CALL putseq(8, managername$, retry%)
+IF retry% = 0 THEN success% = 0: CLOSE #8: EXIT SUB
+CALL putseq(8, managernum$, retry%)
+IF retry% = 0 THEN success% = 0: CLOSE #8: EXIT SUB
+CLOSE #8
+
+
+END SUB
+

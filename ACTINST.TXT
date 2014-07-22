@@ -1,0 +1,745 @@
+DECLARE SUB openfile (filename$, filenum%, type$, reclen%, retry%)
+DECLARE SUB putrandom (filenum%, type$, recnum%, retry%)
+DECLARE SUB putseq (filenum%, p$, retry%)
+DECLARE SUB makedir (dir$, retry%)
+DECLARE SUB promptdisplay (prompt$, promptline%, promptfore%, promptback%, clearline%)
+DECLARE SUB alertbox (top%, dep%, proline1%, proline2%, proline3%, pro1$, pro2$, pro3$, yesorno$)
+DECLARE SUB makedb (filename$, success%)
+DECLARE SUB checkvalid (key$, type$, newkey$)
+DECLARE SUB inputstr (length%, row%, startcol%, default$, type$, retvalue$, retkey$)
+DECLARE SUB inputdatabox (top%, left%, division%, wid%, depth%)
+DECLARE SUB encrypt (in$, out$, param1%, param2%, param3%, code%)
+COMMON SHARED alertborderfore%, alertborderback%, alerttextfore%, alerttextback%
+COMMON SHARED e%, cont%, curmonth%, curyear%
+
+TYPE weeklyrecord
+        wholerecord AS STRING * 148
+END TYPE
+
+TYPE agentdetails
+        agentname AS STRING * 25
+        agentnumber AS STRING * 7
+END TYPE
+
+OPTION BASE 1
+'$DYNAMIC
+DIM SHARED agentweek AS weeklyrecord
+DIM SHARED agentsinteam AS agentdetails
+DIM details$(8)
+path$ = "C:\ACTIVITY"
+
+ON ERROR GOTO ErrorHandler
+
+SCREEN 0
+WIDTH 80, 25
+alerttextfore% = 15: alerttextback% = 0
+alertborderfore% = 15: alertborderback% = 0
+CLS
+
+curdate$ = DATE$
+curmonth% = VAL(LEFT$(curdate$, 2))
+curyear% = VAL(RIGHT$(curdate$, 4))
+startmonth% = curmonth%
+endmonth% = startmonth%
+startyear% = curyear%
+endyear% = startyear%
+CALL alertbox(10, 2, 11, 12, 10, "Welcome to Activity", "Press Any Key to Start Installation", "", yesorno$)
+
+levelcheck:
+CLS
+CALL promptdisplay("Install Activity for:", 7, 15, 0, 1)
+CALL promptdisplay("National Director  (1)", 9, 15, 0, 1)
+CALL promptdisplay("Regional Director  (2)", 10, 15, 0, 1)
+CALL promptdisplay("Snr Branch Manager (3)", 11, 15, 0, 1)
+CALL promptdisplay("Branch Manager     (4)", 12, 15, 0, 1)
+CALL promptdisplay("Sales Team Manager (5)", 13, 15, 0, 1)
+CALL promptdisplay("Please Press a Key (1-5)", 15, 15, 0, 1)
+getkey:
+DO
+        k$ = INKEY$
+LOOP UNTIL k$ <> ""
+IF k$ = CHR$(27) THEN GOTO QuitProgram
+IF VAL(k$) > 5 OR VAL(k$) < 1 THEN GOTO getkey
+level% = VAL(k$)
+
+snrbranchcheck:
+CLS
+IF level% > 3 THEN
+        CALL alertbox(10, 1, 11, 12, 10, "Is Your Branch under a Senior Branch (Y/N)?", "", "", yesorno$)
+        IF yesorno$ = "y" THEN
+                snrbr% = 1
+        ELSEIF yesorno$ = "n" THEN
+                snrbr% = 0
+        ELSE
+                GOTO levelcheck
+        END IF
+END IF
+
+inputdetails:
+CLS
+CALL promptdisplay("Input Details - Press Esc to End", 1, 15, 0, 1)
+top% = 9
+left% = 18
+
+CALL inputdatabox(top% - 5, left% - 2, 19, 32, 1)
+LOCATE top% - 4, left%, 0: PRINT "Install Directory"
+DO
+CALL inputstr(11, top% - 4, left% + 20, path$, "STR", path$, retkey$)
+LOOP UNTIL retkey$ = "esc" OR retkey$ = "ret"
+IF retkey$ = "esc" AND level% > 3 THEN
+        GOTO snrbranchcheck
+ELSEIF retkey$ = "esc" THEN
+        GOTO levelcheck
+END IF
+IF level% > 3 THEN
+        CALL inputdatabox(top%, left% - 2, 19, 46, (level% - 2 + snrbr%) * 2)
+        LOCATE top% + 1, left%, 0: PRINT "Region Name"
+        LOCATE top% + 2, left%, 0: PRINT "Region Number"
+        IF snrbr% = 1 THEN
+                LOCATE top% + 3, left%, 0: PRINT "Snr Branch Name"
+                LOCATE top% + 4, left%, 0: PRINT "Snr Branch Number"
+                LOCATE top% + 5, left%, 0: PRINT "Branch Name"
+                LOCATE top% + 6, left%, 0: PRINT "Branch Number"
+                IF level% = 5 THEN
+                        LOCATE top% + 7, left%, 0: PRINT "Sales Team Name"
+                        LOCATE top% + 8, left%, 0: PRINT "Sales Team Number"
+                END IF
+        ELSE
+                LOCATE top% + 3, left%, 0: PRINT "Branch Name"
+                LOCATE top% + 4, left%, 0: PRINT "Branch Number"
+                IF level% = 5 THEN
+                        LOCATE top% + 5, left%, 0: PRINT "Sales Team Name"
+                        LOCATE top% + 6, left%, 0: PRINT "Sales Team Number"
+                END IF
+        END IF
+        i% = 1
+        DO
+                IF i% MOD 2 = 1 THEN
+                        CALL inputstr(25, top% + i%, left% + 20, details$(i%), "STR", retvalue$, retkey$)
+                        details$(i%) = retvalue$
+                ELSE
+                        CALL inputstr(7, top% + i%, left% + 20, details$(i%), "NUM", retvalue$, retkey$)
+                        details$(i%) = retvalue$
+                END IF
+                IF retkey$ = "ret" THEN retkey$ = "down"
+                IF retkey$ = "up" THEN i% = i% - 1: IF i% = 0 THEN i% = (level% - 2 + snrbr%) * 2
+                IF retkey$ = "down" THEN i% = i% + 1: IF i% > (level% - 2 + snrbr%) * 2 THEN i% = 1
+        LOOP UNTIL retkey$ = "esc"
+ELSEIF level% > 1 THEN
+        CALL inputdatabox(top%, left% - 2, 19, 46, (level% - 1) * 2)
+        LOCATE top% + 1, left%, 0: PRINT "Region Name"
+        LOCATE top% + 2, left%, 0: PRINT "Region Number"
+        IF level% > 2 THEN
+                LOCATE top% + 3, left%, 0: PRINT "Snr Branch Name"
+                LOCATE top% + 4, left%, 0: PRINT "Snr Branch Number"
+        END IF
+        i% = 1
+        DO
+                IF i% MOD 2 = 1 THEN
+                        CALL inputstr(25, top% + i%, left% + 20, details$(i%), "STR", retvalue$, retkey$)
+                        details$(i%) = retvalue$
+                ELSE
+                        CALL inputstr(7, top% + i%, left% + 20, details$(i%), "NUM", retvalue$, retkey$)
+                        details$(i%) = retvalue$
+                END IF
+                IF retkey$ = "ret" THEN retkey$ = "down"
+                IF retkey$ = "up" THEN i% = i% - 1: IF i% = 0 THEN i% = (level% - 1) * 2
+                IF retkey$ = "down" THEN i% = i% + 1: IF i% > (level% - 1) * 2 THEN i% = 1
+        LOOP UNTIL retkey$ = "esc"
+END IF
+
+CALL alertbox(top% + 10, 1, top% + 11, top% + 10, top% + 12, "Is This Correct (Y/N)?", "", "", yesorno$)
+IF yesorno$ <> "y" THEN GOTO inputdetails
+
+ok% = 1
+IF level% > 3 THEN
+        FOR i% = 1 TO (level% - 2 + snrbr%) * 2
+                IF details$(i%) = "" THEN ok% = 0
+        NEXT
+ELSE
+        FOR i% = 1 TO (level% - 1) * 2
+                IF details$(i%) = "" THEN ok% = 0
+        NEXT
+END IF
+IF ok% = 0 THEN GOTO inputdetails
+IF snrbr% = 0 AND level% > 3 THEN
+        details$(8) = details$(6)
+        details$(7) = details$(5)
+        details$(6) = details$(4)
+        details$(5) = details$(3)
+END IF
+
+CALL makedir(path$, success%)
+IF success% = 0 THEN GOTO Fatal
+
+CALL openfile(path$ + "\level.cfg", 1, "SO", 1, success%)
+IF success% = 0 THEN GOTO Fatal
+FOR i% = 1 TO 8
+        CALL putseq(1, details$(i%), success%)
+        IF success% = 0 THEN GOTO Fatal
+NEXT
+CLOSE #1
+CALL openfile(path$ + "\activity.cfg", 1, "SO", 1, success%)
+IF success% = 0 THEN GOTO Fatal
+FOR i% = 1 TO 4
+        CALL putseq(1, "15", success%)
+        IF success% = 0 THEN GOTO Fatal
+        CALL putseq(1, "0", success%)
+        IF success% = 0 THEN GOTO Fatal
+NEXT
+        CALL putseq(1, "0", success%)
+        IF success% = 0 THEN GOTO Fatal
+        CALL putseq(1, "7", success%)
+        IF success% = 0 THEN GOTO Fatal
+FOR i% = 1 TO 2
+        CALL putseq(1, "15", success%)
+        IF success% = 0 THEN GOTO Fatal
+        CALL putseq(1, "0", success%)
+        IF success% = 0 THEN GOTO Fatal
+NEXT
+CALL putseq(1, DATE$, success%)
+IF success% = 0 THEN GOTO Fatal
+CALL putseq(1, path$, success%)
+IF success% = 0 THEN GOTO Fatal
+CLOSE #1
+
+SHELL "copy a:\activity.exe " + path$ + " > nul"
+
+CALL makedb(path$ + "\uk.db", success%)
+IF success% = 0 THEN GOTO Fatal
+
+CALL openfile(path$ + "\defaults.dat", 1, "SO", 1, success%)
+IF success% = 0 THEN GOTO Fatal
+CALL putseq(1, "240:1", success%)
+IF success% = 0 THEN GOTO Fatal
+CALL putseq(1, "2:3", success%)
+IF success% = 0 THEN GOTO Fatal
+CALL putseq(1, "1:2", success%)
+IF success% = 0 THEN GOTO Fatal
+CALL putseq(1, "1:2", success%)
+IF success% = 0 THEN GOTO Fatal
+CALL putseq(1, "1:6", success%)
+IF success% = 0 THEN GOTO Fatal
+CLOSE #1
+       
+IF level% > 1 THEN
+        CALL openfile(path$ + "\country.cfg", 1, "SO", 1, success%)
+        IF success% = 0 THEN GOTO Fatal
+        CALL putseq(1, "1", success%)
+        IF success% = 0 THEN GOTO Fatal
+        CALL putseq(1, "", success%)
+        IF success% = 0 THEN GOTO Fatal
+        CALL putseq(1, "", success%)
+        IF success% = 0 THEN GOTO Fatal
+        CLOSE #1
+        CALL openfile(path$ + "\region.dat", 1, "R", 32, success%)
+        IF success% = 0 THEN GOTO Fatal
+        CALL encrypt(details$(1) + SPACE$(25 - LEN(details$(1))), a$, 10, 5, 20, 1)
+        CALL encrypt(details$(2) + SPACE$(7 - LEN(details$(2))), b$, 10, 5, 20, 1)
+        agentsinteam.agentname = a$
+        agentsinteam.agentnumber = b$
+        CALL putrandom(1, "1", 1, success%)
+        IF success% = 0 THEN GOTO Fatal
+        CLOSE #1
+        CALL makedir(path$ + "\" + details$(2), success%)
+        IF success% = 0 THEN GOTO Fatal
+        CALL makedb(path$ + "\" + details$(2) + ".db", success%)
+        IF success% = 0 THEN GOTO Fatal
+        IF level% > 2 THEN
+                CALL openfile(path$ + "\" + details$(2) + "\region.cfg", 1, "SO", 1, success%)
+                IF success% = 0 THEN GOTO Fatal
+                CALL putseq(1, "1", success%)
+                IF success% = 0 THEN GOTO Fatal
+                CALL putseq(1, "", success%)
+                IF success% = 0 THEN GOTO Fatal
+                CALL putseq(1, "", success%)
+                IF success% = 0 THEN GOTO Fatal
+                CLOSE #1
+                CALL openfile(path$ + "\" + details$(2) + "\area.dat", 1, "R", 32, success%)
+                IF success% = 0 THEN GOTO Fatal
+                CALL encrypt(details$(3) + SPACE$(25 - LEN(details$(3))), a$, 10, 5, 20, 1)
+                CALL encrypt(details$(4) + SPACE$(7 - LEN(details$(4))), b$, 10, 5, 20, 1)
+                agentsinteam.agentname = a$
+                agentsinteam.agentnumber = b$
+                CALL putrandom(1, "1", 1, success%)
+                IF success% = 0 THEN GOTO Fatal
+                CLOSE #1
+                CALL makedir(path$ + "\" + details$(2) + "\" + details$(4), success%)
+                IF success% = 0 THEN GOTO Fatal
+                CALL makedb(path$ + "\" + details$(2) + "\" + details$(4) + ".db", success%)
+                IF success% = 0 THEN GOTO Fatal
+                IF level% > 3 THEN
+                        CALL openfile(path$ + "\" + details$(2) + "\" + details$(4) + "\area.cfg", 1, "SO", 1, success%)
+                        IF success% = 0 THEN GOTO Fatal
+                        CALL putseq(1, "1", success%)
+                        IF success% = 0 THEN GOTO Fatal
+                        CALL putseq(1, "", success%)
+                        IF success% = 0 THEN GOTO Fatal
+                        CALL putseq(1, "", success%)
+                        IF success% = 0 THEN GOTO Fatal
+                        CLOSE #1
+                        CALL openfile(path$ + "\" + details$(2) + "\" + details$(4) + "\branch.dat", 1, "R", 32, success%)
+                        IF success% = 0 THEN GOTO Fatal
+                        CALL encrypt(details$(5) + SPACE$(25 - LEN(details$(5))), a$, 10, 5, 20, 1)
+                        CALL encrypt(details$(6) + SPACE$(7 - LEN(details$(6))), b$, 10, 5, 20, 1)
+                        agentsinteam.agentname = a$
+                        agentsinteam.agentnumber = b$
+                        CALL putrandom(1, "1", 1, success%)
+                        IF success% = 0 THEN GOTO Fatal
+                        CLOSE #1
+                        CALL makedir(path$ + "\" + details$(2) + "\" + details$(4) + "\" + details$(6), success%)
+                        IF success% = 0 THEN GOTO Fatal
+                        CALL makedb(path$ + "\" + details$(2) + "\" + details$(4) + "\" + details$(6) + ".db", success%)
+                        IF success% = 0 THEN GOTO Fatal
+                        IF level% > 4 THEN
+                                CALL openfile(path$ + "\" + details$(2) + "\" + details$(4) + "\" + details$(6) + "\branch.cfg", 1, "SO", 1, success%)
+                                IF success% = 0 THEN GOTO Fatal
+                                CALL putseq(1, "1", success%)
+                                IF success% = 0 THEN GOTO Fatal
+                                CALL putseq(1, "", success%)
+                                IF success% = 0 THEN GOTO Fatal
+                                CALL putseq(1, "", success%)
+                                IF success% = 0 THEN GOTO Fatal
+                                CLOSE #1
+                                CALL openfile(path$ + "\" + details$(2) + "\" + details$(4) + "\" + details$(6) + "\team.dat", 1, "R", 32, success%)
+                                IF success% = 0 THEN GOTO Fatal
+                                CALL encrypt(details$(7) + SPACE$(25 - LEN(details$(7))), a$, 10, 5, 20, 1)
+                                CALL encrypt(details$(8) + SPACE$(7 - LEN(details$(8))), b$, 10, 5, 20, 1)
+                                agentsinteam.agentname = a$
+                                agentsinteam.agentnumber = b$
+                                CALL putrandom(1, "1", 1, success%)
+                                IF success% = 0 THEN GOTO Fatal
+                                CLOSE #1
+                                CALL makedir(path$ + "\" + details$(2) + "\" + details$(4) + "\" + details$(6) + "\" + details$(8), success%)
+                                IF success% = 0 THEN GOTO Fatal
+                                CALL makedb(path$ + "\" + details$(2) + "\" + details$(4) + "\" + details$(6) + "\" + details$(8) + ".db", success%)
+                                IF success% = 0 THEN GOTO Fatal
+                                CALL openfile(path$ + "\" + details$(2) + "\" + details$(4) + "\" + details$(6) + "\" + details$(8) + "\team.cfg", 1, "SO", 1, success%)
+                                IF success% = 0 THEN GOTO Fatal
+                                CALL putseq(1, "0", success%)
+                                IF success% = 0 THEN GOTO Fatal
+                                CALL putseq(1, "", success%)
+                                IF success% = 0 THEN GOTO Fatal
+                                CALL putseq(1, "", success%)
+                                IF success% = 0 THEN GOTO Fatal
+                                CLOSE #1
+                        ELSE
+                                CALL openfile(path$ + "\" + details$(2) + "\" + details$(4) + "\" + details$(6) + "\branch.cfg", 1, "SO", 1, success%)
+                                IF success% = 0 THEN GOTO Fatal
+                                CALL putseq(1, "0", success%)
+                                IF success% = 0 THEN GOTO Fatal
+                                CALL putseq(1, "", success%)
+                                IF success% = 0 THEN GOTO Fatal
+                                CALL putseq(1, "", success%)
+                                IF success% = 0 THEN GOTO Fatal
+                                CLOSE #1
+                        END IF
+                ELSE
+                        CALL openfile(path$ + "\" + details$(2) + "\" + details$(4) + "\area.cfg", 1, "SO", 1, success%)
+                        IF success% = 0 THEN GOTO Fatal
+                        CALL putseq(1, "0", success%)
+                        IF success% = 0 THEN GOTO Fatal
+                        CALL putseq(1, "", success%)
+                        IF success% = 0 THEN GOTO Fatal
+                        CALL putseq(1, "", success%)
+                        IF success% = 0 THEN GOTO Fatal
+                        CLOSE #1
+                END IF
+        ELSE
+                CALL openfile(path$ + "\" + details$(2) + "\region.cfg", 1, "SO", 1, success%)
+                IF success% = 0 THEN GOTO Fatal
+                CALL putseq(1, "0", success%)
+                IF success% = 0 THEN GOTO Fatal
+                CALL putseq(1, "", success%)
+                IF success% = 0 THEN GOTO Fatal
+                CALL putseq(1, "", success%)
+                IF success% = 0 THEN GOTO Fatal
+                CLOSE #1
+        END IF
+ELSE
+        CALL openfile(path$ + "\country.cfg", 1, "SO", 1, success%)
+        IF success% = 0 THEN GOTO Fatal
+        CALL putseq(1, "0", success%)
+        IF success% = 0 THEN GOTO Fatal
+        CALL putseq(1, "", success%)
+        IF success% = 0 THEN GOTO Fatal
+        CALL putseq(1, "", success%)
+        IF success% = 0 THEN GOTO Fatal
+        CLOSE #1
+END IF
+
+CALL openfile(path$ + "\a.bat", 1, "SO", 1, success%)
+IF success% = 0 THEN GOTO Fatal
+CALL putseq(1, "ECHO OFF", success%)
+IF success% = 0 THEN GOTO Fatal
+CALL putseq(1, "IF EXIST DIR?.$$$ DEL DIR?.$$$", success%)
+IF success% = 0 THEN GOTO Fatal
+CALL putseq(1, "IF EXIST TEMP DEL TEMP", success%)
+IF success% = 0 THEN GOTO Fatal
+CALL putseq(1, "ACTIVITY" + STR$(6 - level%), success%)
+IF success% = 0 THEN GOTO Fatal
+
+GOTO QuitProgram
+
+END
+
+QuitProgram:
+CLS
+LOCATE 1, 1, 0: PRINT "Thankyou for using ACTIVITY. Remember to Backup Data Regularly."
+END
+
+Fatal:
+CLS
+CLOSE #0
+LOCATE 1, 1, 0: PRINT "ACTIVITY Could not be Installed Properly."
+END
+
+
+ErrorHandler:
+stanmess$ = "Retry Operation (Y/N)?"
+e% = 1
+SELECT CASE ERR
+       
+        ' Mainly Disk Errors
+        CASE 53
+        CALL alertbox(19, 2, 20, 21, 22, "File Not Found Error", stanmess$, "", yesorno$)
+        IF yesorno$ = "y" THEN cont% = 1: RESUME ELSE cont% = 0: RESUME NEXT
+        CASE 67
+        CALL alertbox(19, 3, 20, 21, 22, "Too Many Files Open Error", "Quit ACTIVITY and Make Sure that in CONFIG.SYS", "FILES=8 or More", yesorno$)
+        IF yesorno$ = "y" THEN cont% = 1: RESUME ELSE cont% = 0: RESUME NEXT
+        CASE 68
+        CALL alertbox(19, 2, 20, 21, 22, "Device Not Ready Error", stanmess$, "", yesorno$)
+        IF yesorno$ = "y" THEN cont% = 1: RESUME ELSE cont% = 0: RESUME NEXT
+        CASE 71
+        CALL alertbox(19, 2, 20, 21, 22, "Disk Not Ready Error", stanmess$, "", yesorno$)
+        IF yesorno$ = "y" THEN cont% = 1: RESUME ELSE cont% = 0: RESUME NEXT
+        CASE 52, 64
+        CALL alertbox(19, 2, 20, 21, 22, "Invalid File Error", stanmess$, "", yesorno$)
+        IF yesorno$ = "y" THEN cont% = 1: RESUME ELSE cont% = 0: RESUME NEXT
+        CASE 58
+        CALL alertbox(19, 2, 20, 21, 22, "File Already Exists Error", stanmess$, "", yesorno$)
+        IF yesorno$ = "y" THEN cont% = 1: RESUME ELSE cont% = 0: RESUME NEXT
+        CASE 61
+        CALL alertbox(19, 2, 20, 21, 22, "Disk Full Error", stanmess$, "", yesorno$)
+        IF yesorno$ = "y" THEN cont% = 1: RESUME ELSE cont% = 0: RESUME NEXT
+        CASE 70
+        CALL alertbox(19, 2, 20, 21, 22, "Access Denied Error", stanmess$, "", yesorno$)
+        IF yesorno$ = "y" THEN cont% = 1: RESUME ELSE cont% = 0: RESUME NEXT
+        CASE 72
+        CALL alertbox(19, 2, 20, 21, 22, "Disk Error", stanmess$, "", yesorno$)
+        IF yesorno$ = "y" THEN cont% = 1: RESUME ELSE cont% = 0: RESUME NEXT
+        CASE 75
+        CALL alertbox(19, 2, 20, 21, 22, "Path/File Access Error", stanmess$, "", yesorno$)
+        IF yesorno$ = "y" THEN cont% = 1: RESUME ELSE cont% = 0: RESUME NEXT
+        CASE 76
+        CALL alertbox(19, 2, 20, 21, 22, "Path Not Found Error", stanmess$, "", yesorno$)
+        IF yesorno$ = "y" THEN cont% = 1: RESUME ELSE cont% = 0: RESUME NEXT
+       
+        'Mainly Printer Errors
+        CASE 24
+        CALL alertbox(19, 2, 20, 21, 22, "Device Timeout Error", stanmess$, "", yesorno$)
+        IF yesorno$ = "y" THEN cont% = 1: RESUME ELSE cont% = 0: RESUME NEXT
+        CASE 25
+        CALL alertbox(19, 2, 20, 21, 22, "Device Fault Error", stanmess$, "", yesorno$)
+        IF yesorno$ = "y" THEN cont% = 1: RESUME ELSE cont% = 0: RESUME NEXT
+        CASE 27
+        CALL alertbox(19, 2, 20, 21, 22, "Printer Out of Paper Error", stanmess$, "", yesorno$)
+        IF yesorno$ = "y" THEN cont% = 1: RESUME ELSE cont% = 0: RESUME NEXT
+        CASE 57
+        CALL alertbox(19, 2, 20, 21, 22, "Device Error", stanmess$, "", yesorno$)
+        IF yesorno$ = "y" THEN cont% = 1: RESUME ELSE cont% = 0: RESUME NEXT
+        CASE 69
+        CALL alertbox(19, 2, 20, 21, 22, "Communications Data Overflow Error", stanmess$, "", yesorno$)
+        IF yesorno$ = "y" THEN cont% = 1: RESUME ELSE cont% = 0: RESUME NEXT
+       
+        'Fatal Errors    
+        CASE 51
+        CALL alertbox(19, 2, 20, 21, 22, "Internal Error", "Press Any Key to Exit ACTIVITY", "", "")
+        GOTO QuitProgram
+        CASE 7, 14
+        CALL alertbox(19, 2, 20, 21, 22, "Out of Memory Error", "Press Any Key to Exit ACTIVITY", "", "")
+        GOTO QuitProgram
+        CASE ELSE
+        CALL alertbox(19, 2, 20, 21, 22, "Fatal Error", "Press Any Key to Exit ACTIVITY", "", "")
+        GOTO QuitProgram
+END SELECT
+
+REM $STATIC
+SUB alertbox (top%, dep%, proline1%, proline2%, proline3%, pro1$, pro2$, pro3$, yesorno$)
+
+        IF LEN(pro1$) > LEN(pro2$) THEN maxlength% = LEN(pro1$) ELSE maxlength% = LEN(pro2$)
+        IF LEN(pro3$) > maxlength% THEN maxlength% = LEN(pro3$)
+        IF maxlength% MOD 2 = 1 THEN maxlength% = maxlength% + 1: n% = 1 ELSE n% = 0
+   
+        CALL promptdisplay(pro1$, proline1%, alerttextfore%, alerttextback%, 0)
+        CALL promptdisplay(pro2$, proline2%, alerttextfore%, alerttextback%, 0)
+        CALL promptdisplay(pro3$, proline3%, alerttextfore%, alerttextback%, 0)
+
+        COLOR alertborderfore%, alertborderback%
+        LOCATE top%, ((80 - maxlength%) / 2), 0
+        PRINT CHR$(218); STRING$(maxlength% - n%, 196); CHR$(191)
+        FOR a% = 1 TO dep%
+                LOCATE top% + a%, ((80 - maxlength%) / 2), 0: PRINT CHR$(179)
+                LOCATE top% + a%, ((80 - maxlength%) / 2) + maxlength% + 1 - n%, 0: PRINT CHR$(179)
+        NEXT
+        LOCATE top% + dep% + 1, ((80 - maxlength%) / 2), 0
+        PRINT CHR$(192); STRING$(maxlength% - n%, 196); CHR$(217)
+
+        DO
+                key$ = INKEY$
+        LOOP UNTIL key$ <> ""
+        IF key$ = "Y" OR key$ = "y" THEN
+                yesorno$ = "y"
+        ELSE
+                IF key$ <> "" THEN
+                        IF ASC(key$) = 27 THEN yesorno$ = "esc" ELSE yesorno$ = "n"
+                END IF
+        END IF
+
+        FOR row% = top% TO top% + dep% + 1
+                LOCATE row%, ((80 - maxlength%) / 2), 0: PRINT SPACE$(maxlength% + 2 + n%);
+        NEXT
+      
+END SUB
+
+SUB checkvalid (key$, type$, newkey$)
+
+SELECT CASE key$
+        CASE "0" TO "9", "A" TO "Z", "a" TO "z"
+        newkey$ = key$
+        CASE ELSE
+        IF type$ = "STR" THEN newkey$ = key$ ELSE newkey$ = ""
+END SELECT
+
+END SUB
+
+SUB encrypt (in$, out$, param1%, param2%, param3%, code%)
+     
+        out$ = ""
+        temp$ = ""
+        IF LEN(in$) = 0 THEN EXIT SUB
+        IF code% = 1 THEN
+                FOR a% = 1 TO LEN(in$)
+                        char% = ASC(MID$(in$, a%, 1)) XOR param1%
+                        out$ = out$ + CHR$(char%)
+                NEXT
+                FOR a% = 1 TO param2%
+                        out$ = MID$(out$, 2) + LEFT$(out$, 1)
+                NEXT
+                FOR a% = 1 TO INT(LEN(out$) / 2)
+                        char% = ASC(MID$(out$, a%, 1)) XOR param3%
+                        temp$ = temp$ + CHR$(char%)
+                NEXT
+                out$ = temp$ + MID$(out$, INT(LEN(out$) / 2) + 1)
+        ELSE
+                FOR a% = 1 TO INT(LEN(in$) / 2)
+                        char% = ASC(MID$(in$, a%, 1)) XOR param3%
+                        temp$ = temp$ + CHR$(char%)
+                NEXT
+                out$ = temp$ + MID$(in$, INT(LEN(in$) / 2) + 1)
+                temp$ = ""
+                FOR a% = 1 TO param2%
+                        out$ = RIGHT$(out$, 1) + LEFT$(out$, LEN(out$) - 1)
+                NEXT
+                FOR a% = 1 TO LEN(out$)
+                        char% = ASC(MID$(out$, a%, 1)) XOR param1%
+                        temp$ = temp$ + CHR$(char%)
+                NEXT
+        out$ = temp$
+        END IF
+        IF code% = 0 THEN out$ = LTRIM$(RTRIM$(out$))
+
+END SUB
+
+SUB inputdatabox (top%, left%, division%, wid%, depth%)
+      
+        LOCATE top%, left%
+        PRINT CHR$(201); STRING$(division%, 205); CHR$(209); STRING$(wid% - division%, 205); CHR$(187)
+        FOR a% = 1 TO depth%
+                LOCATE top% + a%, left%: PRINT CHR$(186)
+                LOCATE top% + a%, left% + division% + 1: PRINT CHR$(179)
+                LOCATE top% + a%, left% + wid% + 2: PRINT CHR$(186)
+        NEXT
+        LOCATE top% + depth% + 1, left%
+        PRINT CHR$(200); STRING$(division%, 205); CHR$(207); STRING$(wid% - division%, 205); CHR$(188)
+
+END SUB
+
+SUB inputstr (length%, row%, startcol%, default$, type$, retvalue$, retkey$)
+      
+        thiscol% = 1
+        endcol% = LEN(default$) + 1
+        lastcol% = length% + 1
+        IF startcol% + lastcol% > 79 THEN
+                lastcol% = 81 - startcol%
+                length% = lastcol% - 1
+        END IF
+        endkey% = 0
+        retvalue$ = default$
+     
+        COLOR 0, 15
+        DO
+                LOCATE row%, startcol%
+                PRINT retvalue$; SPACE$(length% - LEN(retvalue$))
+                LOCATE row%, startcol% + thiscol% - 1, 1
+                newchar$ = ""
+                DO
+                        key$ = INKEY$
+                LOOP UNTIL key$ <> ""
+
+                k% = ASC(key$)
+                IF k% = 0 THEN
+                        key$ = MID$(key$, 2)
+                        k% = ASC(key$) + 500
+                END IF
+                SELECT CASE k%
+                        CASE 575
+                        IF thiscol% > 1 THEN thiscol% = thiscol% - 1
+                        CASE 577
+                        IF thiscol% < endcol% THEN thiscol% = thiscol% + 1
+                        CASE 583
+                        IF thiscol% < endcol% THEN
+                                retvalue$ = LEFT$(retvalue$, thiscol% - 1) + MID$(retvalue$, thiscol% + 1)
+                                endcol% = endcol% - 1
+                        END IF
+                        CASE 572
+                        endkey% = 1
+                        retkey$ = "up"
+                        CASE 580
+                        endkey% = 1
+                        retkey$ = "down"
+                        CASE 500 TO 800
+                        CASE 8
+                        IF thiscol% > 1 THEN
+                                retvalue$ = LEFT$(retvalue$, thiscol% - 2) + MID$(retvalue$, thiscol%)
+                                thiscol% = thiscol% - 1
+                                endcol% = endcol% - 1
+                        END IF
+                        CASE 13
+                        endkey% = 1
+                        retkey$ = "ret"
+                        CASE 27
+                        endkey% = 1
+                        retkey$ = "esc"
+                        CASE 0 TO 31
+                        CASE ELSE
+                        IF thiscol% < lastcol% THEN
+                                CALL checkvalid(key$, type$, newkey$)
+                        END IF
+                        IF newkey$ > "" THEN
+                                IF type$ = "NUM" THEN newkey$ = UCASE$(newkey$)
+                                retvalue$ = LEFT$(retvalue$, thiscol% - 1) + newkey$ + MID$(retvalue$, thiscol%)
+                                retvalue$ = LEFT$(retvalue$, length%)
+                                IF thiscol% < lastcol% THEN thiscol% = thiscol% + 1
+                                IF endcol% < lastcol% THEN endcol% = endcol% + 1
+                        END IF
+                END SELECT
+        LOOP UNTIL endkey% > 0
+        retvalue$ = LTRIM$(RTRIM$(retvalue$))
+        COLOR 15, 0
+        LOCATE row%, startcol%
+        PRINT retvalue$; SPACE$(length% - LEN(retvalue$))
+
+END SUB
+
+SUB makedb (filename$, success%)
+
+success% = 1
+CALL openfile(filename$, 2, "R", 148, retry%)
+IF retry% = 0 THEN success% = 0: EXIT SUB
+
+y$ = LTRIM$(RTRIM$(STR$(curyear%)))
+FOR a% = 1 TO curmonth%
+        FOR b% = 1 TO 5
+                m$ = LTRIM$(RTRIM$(STR$(a%))): IF LEN(m$) = 1 THEN m$ = m$ + " "
+                w$ = LTRIM$(RTRIM$(STR$(b%)))
+                whole$ = y$ + m$ + w$
+                agentweek.wholerecord = whole$ + SPACE$(148 - LEN(whole$))
+                rec% = ((a% - 1) * 5) + b%
+                CALL putrandom(2, "2", rec%, retry%)
+                IF retry% = 0 THEN success% = 0: CLOSE #2: EXIT SUB
+        NEXT
+NEXT
+
+rec% = LOF(2) / 148
+
+FOR i% = 1 TO 12
+        agentweek.wholerecord = SPACE$(148)
+        CALL putrandom(2, "2", rec% + i%, retry%)
+        IF retry% = 0 THEN success% = 0: CLOSE #2: EXIT SUB
+NEXT
+
+CLOSE #2
+
+END SUB
+
+SUB makedir (dir$, retry%)
+
+e% = 0
+MKDIR (dir$)
+IF e% = 1 THEN
+        retry% = cont%
+ELSE
+        retry% = 1
+END IF
+END SUB
+
+SUB openfile (filename$, filenum%, type$, reclen%, retry%)
+
+e% = 0
+IF type$ = "R" THEN
+        OPEN filename$ FOR RANDOM AS #filenum% LEN = reclen%
+ELSEIF type$ = "SI" THEN
+        OPEN filename$ FOR INPUT AS #filenum%
+ELSE
+        OPEN filename$ FOR OUTPUT AS #filenum%
+END IF
+IF e% = 1 THEN
+        retry% = cont%
+ELSE
+        retry% = 1
+END IF
+
+END SUB
+
+SUB promptdisplay (prompt$, promptline%, promptfore%, promptback%, clearline%)
+      
+        COLOR 15, 0
+        curline% = CSRLIN
+        IF clearline% = 1 THEN LOCATE promptline%, 1, 0: PRINT SPACE$(80);
+        COLOR promptfore%, promptback%
+        IF LEN(prompt$) MOD 2 = 1 THEN prompt$ = prompt$ + " "
+        LOCATE promptline%, ((80 - LEN(prompt$)) / 2) + 1: PRINT prompt$;
+        LOCATE curline%
+        COLOR 15, 0
+
+END SUB
+
+SUB putrandom (filenum%, type$, recnum%, retry%)
+
+e% = 0
+IF type$ = "1" THEN
+        PUT #filenum%, recnum%, agentsinteam
+ELSE
+        PUT #filenum%, recnum%, agentweek
+END IF
+IF e% = 1 THEN
+        retry% = cont%
+ELSE
+        retry% = 1
+END IF
+
+END SUB
+
+SUB putseq (filenum%, p$, retry%)
+
+e% = 0
+p$ = LTRIM$(RTRIM$(p$))
+PRINT #filenum%, p$
+IF e% = 1 THEN
+        retry% = cont%
+ELSE
+        retry% = 1
+END IF
+END SUB
+

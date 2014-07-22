@@ -1,0 +1,1681 @@
+DECLARE SUB setmousepos (xmouse%, ymouse%)
+DECLARE SUB openfile (filename$, filenum%, type$, reclen%, retry%)
+DECLARE SUB getrandom (filenum%, t%, recnum%, retry%)
+DECLARE SUB killfile (filename$, retry%)
+DECLARE SUB rename (old$, new$, retry%)
+DECLARE SUB checkprinter (retry%)
+DECLARE SUB menu (numberofoptions%, selection%, top%, t%, promptline%, rubout%)
+DECLARE SUB dialogbox (t$, i$, numberofinputs%, top%)
+DECLARE SUB getmousestate (button%, xmouse%, ymouse%)
+DECLARE SUB promptdisplay (prompt$, promptline%, promptfore%, promptback%, clearline%)
+DECLARE SUB displaysublevels (disp%, levelpath1$, levelpath2$)
+DECLARE SUB alertbox (top%, numberofalerts%, yesorno$)
+DECLARE SUB ruboutmenu (top%, t%, numberofoptions%)
+DECLARE SUB addagent (l%)
+DECLARE SUB chooseagent (l%, sel%)
+DECLARE SUB agentmenudata (l%, n%, includeunit%, success%)
+DECLARE SUB checkexist (l%, newname$, newnum$, exist%, success%)
+DECLARE SUB termagent (l%)
+DECLARE SUB changeagent (l%)
+DECLARE SUB listagents (l%, sel%)
+DECLARE SUB managerdetails (l%)
+DECLARE SUB displayagentlist (l%, s%, sel%)
+DECLARE SUB printagentlist (l%, s%)
+DECLARE SUB restoredata ()
+DECLARE SUB backupdata ()
+DECLARE SUB updatedbrecnum (filename$, success%)
+DECLARE SUB nukedir (dir$, dir%, success%)
+DECLARE SUB importengine (num$, success%)
+DECLARE SUB exportengine (success%)
+DECLARE SUB deleteagent (l%)
+DECLARE SUB exportdb (l%)
+DECLARE SUB importdb (l%)
+DECLARE SUB writeconfig (filename$, numberofdbs%, managername$, managernum$, success%)
+DECLARE SUB makeagent (l%, name$, num$, success%)
+DECLARE SUB readconfig (filename$, numberofdbs%, managername$, managernum$, success%)
+DECLARE SUB resetcols ()
+DECLARE SUB setcolours ()
+DECLARE SUB setdefaults ()
+DECLARE SUB displaycomments (startyear%, endyear%, startmonth%, endmonth%)
+DECLARE SUB printcomments (startyear%, endyear%, startmonth%, endmonth%)
+DECLARE SUB removeagent (l%, num$, success%)
+DECLARE SUB compiledb (l%, d%)
+DECLARE SUB insertagent (l%, name$, num$, success%)
+DECLARE SUB cascadecheck (l%, n%, file$, ret%, ad%, success%)
+DECLARE FUNCTION getlevel$ (l%, plural%, short%)
+DECLARE FUNCTION decrypt$ (in$)
+
+'$INCLUDE: 'common.inc'
+
+DetailsMenu:
+DATA Choose *|Selects A *
+DATA Add *|Creates A New *
+DATA Delete *|Deletes A *
+DATA Change *|Changes The Name And/Or Number Of An Existing *
+DATA List *|Lists All * In The #
+DATA dummy
+DATA Export *|Exports A * Database To Floppy Disk
+DATA Import *|Imports A * Database From Floppy Disk
+DATA Compile *|Compiles * Database
+DATA Previous Menu|Returns To The Previous Menu
+
+AdviserDetailsMenu:
+DATA Choose Adviser|Selects An Adviser
+DATA Add Adviser|Creates A New Adviser
+DATA Delete Adviser|Deletes An Adviser
+DATA Terminate Adviser|Terminates An Adviser
+DATA Change Adviser|Changes The Name And/Or Number Of An Existing Adviser
+DATA List Advisers|Lists All Advisers In The Sales Team
+DATA Sales Manager|Sales Manager Details
+DATA Export Adviser|Exports An Adviser Database To Floppy Disk
+DATA Import Adviser|Imports An Adviser Database From Floppy Disk
+DATA Previous Menu|Returns To The Previous Menu
+
+MaxNumber:
+DATA The Maximum Number Of * Has Been Reached|PAK|
+
+DoneChange:
+DATA The * Change Has Been Done|PAK|
+
+AddExisting:                  
+DATA You Have Tried To Add An Existing *|Please Use The Change * Option If You Wish To Alter This *|PAK|
+
+AddNameExisting:
+DATA "Warning: The * Name Specified Already Exists|Go Ahead (Y/N)?|"
+
+AddTerm:
+DATA You Have Tried To Add A Terminated *|Terminated * Are No Longer Accessible|PAK|
+
+DoesntExist:
+DATA The Existing * Specified Does Not Exist|PAK|
+
+ChangeExisting:
+DATA The New * Specified Already Exists|PAK|
+
+ChangeNameExisting:
+DATA "Warning: The Existing * Name Specified Already Exists|Go Ahead (Y/N)?|"
+
+ChangeTerm:
+DATA The New * Specified Is Already Terminated|Terminated * Are No Longer Accessible|PAK|
+
+TermMan:
+DATA The Manager Specified Is Already Terminated|A Terminated Adviser Cannot Be A Manager|PAK|
+
+DoneTerm:
+DATA The Adviser Has Been Terminated|PAK|
+
+OnlyOneAgent:
+DATA You Can't Have A League Table Using Just One Agent|PAK|
+
+AddBoxData:
+DATA "Name:|Number:|"
+DATA *25*STR*|*7*NUM*|
+
+ChangeBoxData:
+DATA "Existing Name:|Existing Number:|New Name:|New Number:|"
+DATA *25*STR*|*7*NUM*|*25*STR*|*7*NUM*|
+
+ManBoxData:
+DATA "Manager Name:|Manager Number:|"
+DATA *25*STR*|*7*NUM*|
+
+AgentListData:
+DATA Current Advisers|Lists The Advisers Currently In The Sales Team
+DATA Terminated Advisers|Lists Past Advisers
+DATA Previous Menu|Returns To The Previous Menu
+
+AgentListData2:
+DATA To Screen|Displays The List On Screen
+DATA To Printer|Prints The List
+DATA Previous Menu|Returns To The Previous Menu
+
+CommentData:
+DATA To Screen|Displays The Comments On Screen
+DATA To Printer|Prints The Comments
+DATA Previous Menu|Returns To The Previous Menu
+
+CantComment:
+DATA You Can Only Have Comments In Adviser Databases|PAK|
+
+ResetDone:
+DATA Colours Reset Successfully|PAK|
+
+OtherMenu:
+DATA Default Ratios|Sets the Default Target Ratios
+DATA Backup|Backs Up All Databases
+DATA Restore|Restores All Databases
+DATA Set Colours|Sets the Screen Colours
+DATA Reset Colours|Resets the Screen Colours to Black & White
+DATA Previous Menu|Returns to the Previous Menu
+
+BackupWarning:
+DATA "Please Insert A Backup Disk Into Drive A:|Warning: All Data Will Be Erased From It|PAK|"
+
+RestoreReady:
+DATA "Please Insert Backup Disk 1 Into Drive A:|PAK|"
+
+NoRestore:
+DATA There Are No Files To Restore|From This Disk|PAK|
+
+UnSuccessful:
+DATA Unsuccessful Attempt To Retrieve Data|Operation Aborted|PAK|
+
+NoDataAvailable:
+DATA There Is No Data Available|PAK|
+
+SUB addagent (l%)
+
+CALL cascadecheck(l%, numberofdbs%, filename$, ret%, 1, s%)
+IF s% = 0 THEN GOTO failedadd
+IF ret% <> 0 THEN EXIT SUB
+IF numberofdbs% + 1 > 30 THEN GOTO toomany
+
+RESTORE AddBoxData
+READ t$, i$
+CALL dialogbox(t$, i$, 2, 15)
+newname$ = LEFT$(i$, INSTR(i$, "|") - 1)
+newnum$ = MID$(i$, INSTR(i$, "|") + 1)
+IF t$ = "esc" THEN EXIT SUB
+
+CALL checkexist(l%, newname$, newnum$, exist%, s%)
+IF s% = 0 THEN GOTO failedadd
+IF exist% <> 0 THEN
+SELECT CASE exist%
+        CASE 1, 3
+        RESTORE AddExisting
+        READ al$
+        al$ = LEFT$(al$, INSTR(al$, "*") - 1) + getlevel$(l%, 0, 0) + MID$(al$, INSTR(al$, "*") + 1)
+        al$ = LEFT$(al$, INSTR(al$, "*") - 1) + getlevel$(l%, 0, 0) + MID$(al$, INSTR(al$, "*") + 1)
+        al$ = LEFT$(al$, INSTR(al$, "*") - 1) + getlevel$(l%, 0, 0) + MID$(al$, INSTR(al$, "*") + 1)
+        CALL alertbox(15, 3, yn$)
+        CASE 2
+        RESTORE AddNameExisting
+        READ al$
+        al$ = LEFT$(al$, INSTR(al$, "*") - 1) + getlevel$(l%, 0, 0) + MID$(al$, INSTR(al$, "*") + 1)
+        CALL alertbox(15, 2, yn$)
+        CASE 4, 6
+        RESTORE AddTerm
+        READ al$
+        al$ = LEFT$(al$, INSTR(al$, "*") - 1) + getlevel$(l%, 0, 0) + MID$(al$, INSTR(al$, "*") + 1)
+        al$ = LEFT$(al$, INSTR(al$, "*") - 1) + getlevel$(l%, 1, 0) + MID$(al$, INSTR(al$, "*") + 1)
+        CALL alertbox(15, 3, yn$)
+END SELECT
+IF NOT (exist% = 2 AND yn$ = "y") THEN EXIT SUB
+END IF
+
+CALL promptdisplay("Creating " + getlevel$(l%, 0, 0) + "...", 20, VAL(MID$(colour$, 25, 2)), VAL(MID$(colour$, 27, 2)), 1)
+CALL makeagent(l%, newname$, newnum$, s%)
+CALL promptdisplay("", 20, 0, 0, 1)
+IF s% = 0 THEN GOTO failedadd
+detail$(l%, 1) = newname$
+detail$(l%, 0) = newnum$
+CALL displaysublevels(1, "", "")
+EXIT SUB
+
+toomany:
+RESTORE MaxNumber
+READ al$
+al$ = LEFT$(al$, INSTR(al$, "*") - 1) + getlevel$(l%, 1, 0) + MID$(al$, INSTR(al$, "*") + 1)
+CALL alertbox(15, 3, yn$)
+EXIT SUB
+
+failedadd:
+RESTORE UnSuccessful
+READ al$
+CALL alertbox(15, 3, yn$)
+END SUB
+
+SUB agentmenudata (l%, n%, includeunit%, success%)
+
+p$ = path$
+success% = 1
+
+FOR i% = 5 TO l% + 1 STEP -1
+        p$ = p$ + detail$(i%, 0) + "\"
+NEXT
+
+g$ = LCASE$(getlevel$(l% + 1, 0, 1))
+IF g$ = "snr branch" THEN g$ = "area"
+CALL readconfig(p$ + g$ + ".cfg", numberofdbs%, a$, b$, s%)
+IF s% = 0 THEN success% = 0: EXIT SUB
+g$ = LCASE$(getlevel$(l%, 0, 1))
+IF g$ = "snr branch" THEN g$ = "area"
+file$ = p$ + g$ + ".dat"
+
+CALL openfile(file$, 1, "R", 32, retry%)
+IF retry% = 0 THEN success% = 0: EXIT SUB
+FOR i% = 1 TO numberofdbs%
+        CALL getrandom(1, 1, i%, retry%)
+        IF retry% = 0 THEN success% = 0: CLOSE #1: EXIT SUB
+        a$ = LTRIM$(RTRIM$(decrypt$(agentsinteam.agentname)))
+        b$ = LTRIM$(RTRIM$(decrypt$(agentsinteam.agentnumber)))
+        option$(i%) = a$ + SPACE$(27 - LEN(a$)) + b$ + SPACE$(7 - LEN(b$)) + "|Selects " + a$
+NEXT
+CLOSE #1
+IF includeunit% = 1 THEN
+        option$(numberofdbs% + 1) = detail$(l% + 1, 1) + SPACE$(27 - LEN(detail$(l% + 1, 1))) + SPACE$(7) + "|Selects The Whole " + getlevel$(l% + 1, 0, 0)
+        n% = numberofdbs% + 2
+ELSE
+        n% = numberofdbs% + 1
+END IF
+option$(n%) = "Previous Menu|Returns To Previous Menu"
+
+END SUB
+
+SUB alertbox (top%, numberofalerts%, yesorno$)
+  
+'alert$ is the array of alert messages in the box
+'colour$ is a string "aabbccddeeffgghhiijjkkllmmnn"
+'where aa is borderfore, bb is borderback
+'cc is textfore, dd is textback
+'top% is the top line of the box
+
+        DIM alert$(numberofalerts% - 1)
+        FOR i% = 0 TO numberofalerts% - 1
+                alert$(i%) = LEFT$(al$, INSTR(al$, "|") - 1)
+                IF i% < numberofalerts% - 1 THEN al$ = MID$(al$, INSTR(al$, "|") + 1)
+        NEXT
+
+        borderfore% = VAL(MID$(colour$, 1, 2))
+        borderback% = VAL(MID$(colour$, 3, 2))
+        textfore% = VAL(MID$(colour$, 5, 2))
+        textback% = VAL(MID$(colour$, 7, 2))
+
+        IF top% < 1 THEN top% = 1
+        IF top% + numberofalerts% > 23 THEN top% = 23 - numberofalerts%
+        maxlength% = 0
+        FOR i% = 0 TO numberofalerts% - 1
+                IF alert$(i%) = "PAK" THEN alert$(i%) = "Press Any Key"
+                IF INSTR(alert$(i%), "PAK") > 0 THEN alert$(i%) = LEFT$(alert$(i%), INSTR(alert$(i%), "PAK") - 1) + "Press Any Key" + MID$(alert$(i%), INSTR(alert$(i%), "PAK") + 3)
+                IF LEN(alert$(i%)) > 80 THEN alert$(i%) = ""
+                IF LEN(alert$(i%)) > maxlength% THEN maxlength% = LEN(alert$(i%))
+        NEXT
+
+        DIM s%(numberofalerts% + 1, maxlength% + 1, 1)
+        FOR i% = 0 TO numberofalerts% + 1
+                FOR j% = 0 TO maxlength% + 1
+                s%(i%, j%, 0) = SCREEN(top% + i%, INT((80 - maxlength%) / 2) + j%)
+                s%(i%, j%, 1) = SCREEN(top% + i%, INT((80 - maxlength%) / 2) + j%, 1)
+                NEXT
+        NEXT
+
+        COLOR borderfore%, borderback%
+        LOCATE top%, INT((80 - maxlength%) / 2)
+        PRINT CHR$(218); STRING$(maxlength%, 196); CHR$(191);
+        FOR i% = 1 TO numberofalerts%
+                LOCATE top% + i%, INT((80 - maxlength%) / 2): PRINT CHR$(179);
+                LOCATE top% + i%, INT((80 - maxlength%) / 2) + maxlength% + 1: PRINT CHR$(179);
+        NEXT
+        LOCATE top% + numberofalerts% + 1, INT((80 - maxlength%) / 2)
+        PRINT CHR$(192); STRING$(maxlength%, 196); CHR$(217);
+    
+        FOR i% = 1 TO numberofalerts%
+                CALL promptdisplay(SPACE$(maxlength%), top% + i%, textfore%, textback%, 0)
+                CALL promptdisplay(alert$(i% - 1), top% + i%, textfore%, textback%, 0)
+        NEXT
+
+
+'        BEEP
+        DO
+                key$ = INKEY$
+                IF mouse% = 1 THEN CALL getmousestate(button%, xmouse%, ymouse%)
+        LOOP UNTIL key$ <> "" OR button% <> 0
+        IF key$ = "Y" OR key$ = "y" OR button% = 1 THEN
+                yesorno$ = "y"
+        ELSE
+                IF key$ <> "" THEN
+                        IF ASC(key$) = 27 THEN yesorno$ = "esc" ELSE yesorno$ = "n"
+                END IF
+                IF button% = 2 THEN yesorno$ = "n"
+        END IF
+
+        FOR i% = 0 TO numberofalerts% + 1
+                FOR j% = 0 TO maxlength% + 1
+                        LOCATE top% + i%, INT((80 - maxlength%) / 2) + j%
+                        IF s%(i%, j%, 1) < 128 THEN
+                                COLOR s%(i%, j%, 1) MOD 16, INT(s%(i%, j%, 1) / 16)
+                        ELSEIF s%(i%, j%, 1) > 239 THEN
+                                COLOR s%(i%, j%, 1) MOD 32, INT(s%(i%, j%, 1) / 32)
+                        ELSE
+                                COLOR (s%(i%, j%, 1) - 112) MOD 32, INT((s%(i%, j%, 1) - 112) / 32)
+                        END IF
+                        PRINT CHR$(s%(i%, j%, 0));
+                NEXT
+        NEXT
+        ERASE s%
+
+END SUB
+
+SUB backupdata
+
+DIM d$(6, 1)
+FOR i% = 1 TO 6
+        d$(i%, 1) = detail$(i%, 1)
+        d$(i%, 0) = detail$(i%, 0)
+NEXT
+
+RESTORE BackupWarning
+READ al$
+CALL alertbox(15, 3, y$)
+IF y$ = "esc" THEN EXIT SUB
+
+CALL promptdisplay("Clearing Disk - Please Wait...", 20, VAL(MID$(colour$, 25, 2)), VAL(MID$(colour$, 27, 2)), 1)
+FOR i% = 1 TO 5
+        detail$(i%, 1) = ""
+        detail$(i%, 0) = ""
+NEXT
+CALL nukedir("A:", 1, s%)
+IF s% = 0 THEN GOSUB failedbackup: GOTO donebackup
+backup% = 1
+CALL promptdisplay("Backing Up Files - Please Wait...", 20, VAL(MID$(colour$, 25, 2)), VAL(MID$(colour$, 27, 2)), 1)
+CALL exportengine(s%)
+backup% = 0
+IF s% = 0 THEN GOSUB failedbackup
+donebackup:
+CALL promptdisplay("", 20, 0, 0, 1)
+FOR i% = 1 TO 6
+        detail$(i%, 1) = d$(i%, 1)
+        detail$(i%, 0) = d$(i%, 0)
+NEXT
+
+EXIT SUB
+
+failedbackup:
+CLOSE
+RESTORE UnSuccessful
+READ al$
+CALL alertbox(15, 3, yesorno$)
+RETURN
+
+END SUB
+
+SUB changeagent (l%)
+
+CALL cascadecheck(l%, numberofdbs%, filename$, ret%, 1, s%)
+IF s% = 0 THEN GOTO failedchange
+IF ret% <> 0 THEN EXIT SUB
+
+RESTORE ChangeBoxData
+READ t$, i$
+CALL dialogbox(t$, i$, 4, 13)
+IF t$ = "esc" THEN EXIT SUB
+oldname$ = LEFT$(i$, INSTR(i$, "|") - 1)
+i$ = MID$(i$, INSTR(i$, "|") + 1)
+oldnum$ = LEFT$(i$, INSTR(i$, "|") - 1)
+i$ = MID$(i$, INSTR(i$, "|") + 1)
+newname$ = LEFT$(i$, INSTR(i$, "|") - 1)
+newnum$ = MID$(i$, INSTR(i$, "|") + 1)
+IF newname$ = oldname$ AND newnum$ = oldnum$ THEN EXIT SUB
+
+CALL checkexist(l%, oldname$, oldnum$, exist%, s%)
+IF s% = 0 THEN GOTO failedchange
+IF exist% <> 3 THEN
+        RESTORE DoesntExist
+        READ al$
+        al$ = LEFT$(al$, INSTR(al$, "*") - 1) + getlevel$(l%, 0, 0) + MID$(al$, INSTR(al$, "*") + 1)
+        CALL alertbox(15, 2, yn$)
+        EXIT SUB
+END IF
+
+CALL checkexist(l%, newname$, newnum$, exist%, s%)
+IF s% = 0 THEN GOTO failedchange
+IF exist% <> 0 THEN
+SELECT CASE exist%
+        CASE 1, 3
+        IF newnum$ <> oldnum$ THEN
+        RESTORE ChangeExisting
+        READ al$
+        al$ = LEFT$(al$, INSTR(al$, "*") - 1) + getlevel$(l%, 0, 0) + MID$(al$, INSTR(al$, "*") + 1)
+        CALL alertbox(15, 2, yn$)
+        ELSE
+        okay% = 1
+        END IF
+        CASE 2
+        RESTORE ChangeNameExisting
+        READ al$
+        al$ = LEFT$(al$, INSTR(al$, "*") - 1) + getlevel$(l%, 0, 0) + MID$(al$, INSTR(al$, "*") + 1)
+        CALL alertbox(15, 2, yn$)
+        IF yn$ = "y" THEN okay% = 1
+        CASE 4, 6
+        RESTORE ChangeTerm
+        READ al$
+        al$ = LEFT$(al$, INSTR(al$, "*") - 1) + getlevel$(l%, 0, 0) + MID$(al$, INSTR(al$, "*") + 1)
+        al$ = LEFT$(al$, INSTR(al$, "*") - 1) + getlevel$(l%, 1, 0) + MID$(al$, INSTR(al$, "*") + 1)
+        CALL alertbox(15, 3, yn$)
+END SELECT
+IF okay% = 0 THEN EXIT SUB
+END IF
+
+CALL promptdisplay("Changing " + getlevel$(l%, 0, 0) + "...", 20, VAL(MID$(colour$, 25, 2)), VAL(MID$(colour$, 27, 2)), 1)
+CALL removeagent(l%, oldnum$, s%)
+IF s% = 0 THEN GOTO failedchange
+g$ = LCASE$(getlevel$(l% + 1, 0, 1))
+IF g$ = "snr branch" THEN g$ = "area"
+CALL readconfig(p$ + g$ + ".cfg", numberofdbs%, man1$, man2$, s%)
+IF s% = 0 THEN GOTO failedchange
+CALL writeconfig(p$ + g$ + ".cfg", numberofdbs% - 1, man1$, man2$, s%)
+IF s% = 0 THEN GOTO failedchange
+CALL insertagent(l%, newname$, newnum$, s%)
+IF s% = 0 THEN GOTO failedchange
+CALL writeconfig(p$ + g$ + ".cfg", numberofdbs%, man1$, man2$, s%)
+IF s% = 0 THEN GOTO failedchange
+
+p$ = path$
+FOR i% = 5 TO l% + 1 STEP -1
+        p$ = p$ + detail$(i%, 0) + "\"
+NEXT
+
+IF l% = 1 THEN
+        IF UCASE$(newnum$) <> UCASE$(oldnum$) THEN
+                CALL rename(oldnum$ + ".*", newnum$ + ".*", retry%)
+                IF retry% = 0 THEN GOTO failedchange
+        END IF
+ELSE
+        IF UCASE$(newnum$) <> UCASE$(oldnum$) THEN
+                CALL rename(oldnum$ + ".db", newnum$ + ".db", retry%)
+                IF retry% = 0 THEN GOTO failedchange
+                CALL rename(oldnum$, newnum$, retry%)
+                IF retry% = 0 THEN GOTO failedchange
+        END IF
+END IF
+
+CALL promptdisplay("", 20, 0, 0, 1)
+RESTORE DoneChange
+READ al$
+al$ = LEFT$(al$, INSTR(al$, "*") - 1) + getlevel$(l%, 0, 0) + MID$(al$, INSTR(al$, "*") + 1)
+CALL alertbox(15, 2, yn$)
+
+detail$(l%, 1) = newname$
+detail$(l%, 0) = newnum$
+CALL displaysublevels(1, "", "")
+EXIT SUB
+
+failedchange:
+CALL promptdisplay("", 20, 0, 0, 1)
+RESTORE UnSuccessful
+READ al$
+CALL alertbox(15, 3, yn$)
+END SUB
+
+SUB checkexist (l%, newname$, newnum$, exist%, success%)
+
+success% = 1
+exist% = 0
+p$ = path$
+
+FOR i% = 5 TO l% + 1 STEP -1
+        p$ = p$ + detail$(i%, 0) + "\"
+NEXT
+
+g$ = LCASE$(getlevel$(l% + 1, 0, 1))
+IF g$ = "snr branch" THEN g$ = "area"
+CALL readconfig(p$ + g$ + ".cfg", numberofdbs%, a$, b$, s%)
+IF s% = 0 THEN success% = 0: EXIT SUB
+g$ = LCASE$(getlevel$(l%, 0, 1))
+IF g$ = "snr branch" THEN g$ = "area"
+file$ = p$ + g$ + ".dat"
+
+CALL openfile(file$, 1, "R", 32, retry%)
+IF retry% = 0 THEN success% = 0: EXIT SUB
+a% = LOF(1)
+FOR i% = 1 TO numberofdbs%
+        CALL getrandom(1, 1, i%, retry%)
+        IF retry% = 0 THEN success% = 0: CLOSE #1: EXIT SUB
+        a$ = LTRIM$(RTRIM$(decrypt$(agentsinteam.agentname)))
+        b$ = LTRIM$(RTRIM$(decrypt$(agentsinteam.agentnumber)))
+        IF LCASE$(newnum$) = LCASE$(b$) AND LCASE$(newname$) = LCASE$(a$) THEN exist% = 3: EXIT FOR
+        IF LCASE$(newnum$) = LCASE$(b$) THEN exist% = 1: EXIT FOR
+        IF LCASE$(newname$) = LCASE$(a$) THEN exist% = 2: EXIT FOR
+NEXT
+CLOSE #1
+IF a% = 0 THEN CALL killfile(file$, retry%): IF retry% = 0 THEN success% = 0: EXIT SUB
+
+IF l% = 1 THEN
+file$ = p$ + g$ + "t.dat"
+
+CALL openfile(file$, 1, "R", 32, retry%)
+IF retry% = 0 THEN success% = 0: EXIT SUB
+a% = LOF(1)
+FOR i% = 1 TO a% / 32
+        CALL getrandom(1, 1, i%, retry%)
+        IF retry% = 0 THEN success% = 0: CLOSE #1: EXIT SUB
+        a$ = LTRIM$(RTRIM$(decrypt$(agentsinteam.agentname)))
+        b$ = LTRIM$(RTRIM$(decrypt$(agentsinteam.agentnumber)))
+        IF LCASE$(newnum$) = LCASE$(b$) AND LCASE$(newname$) = LCASE$(a$) THEN exist% = 6: EXIT FOR
+        IF LCASE$(newnum$) = LCASE$(b$) THEN exist% = 4: EXIT FOR
+NEXT
+CLOSE #1
+IF a% = 0 THEN CALL killfile(file$, retry%): IF retry% = 0 THEN success% = 0: EXIT SUB
+END IF
+
+END SUB
+
+SUB checkvalid (key$, type$, newkey$)
+
+newkey$ = ""
+
+SELECT CASE key$
+      
+        CASE "0" TO "9"
+        newkey$ = key$
+
+        CASE ELSE
+        IF type$ = "STR" OR type$ = "COM" THEN newkey$ = key$
+
+END SELECT
+
+END SUB
+
+SUB chooseagent (l%, sel%)
+
+IF l% = 4 THEN
+        t% = 43
+ELSEIF l% = 2 THEN
+        t% = 37
+ELSEIF l% = 1 THEN
+        t% = 40
+ELSE
+        t% = 39
+END IF
+
+CALL cascadecheck(l%, numberofdbs%, filename$, ret%, 0, s%)
+IF s% = 0 THEN GOTO failedchoose
+IF ret% <> 0 THEN EXIT SUB
+curname$ = detail$(l%, 1)
+curnum$ = detail$(l%, 0)
+
+CALL agentmenudata(l%, n%, 1, s%)
+IF s% = 0 THEN GOTO failedchoose
+option$(0) = "Select " + getlevel$(l%, 0, 0)
+CALL menu(n%, selection%, 4, t%, 25, 0)
+IF selection% < n% - 1 THEN
+        detail$(l%, 1) = RTRIM$(LEFT$(option$(selection%), 25))
+        detail$(l%, 0) = RTRIM$(RIGHT$(option$(selection%), 7))
+        file$ = LEFT$(path$, LEN(path$) - 1)
+        FOR i% = 5 TO l% STEP -1
+                file$ = file$ + "\" + detail$(i%, 0)
+        NEXT
+        IF l% = 6 THEN file$ = path$ + "uk"
+        CALL promptdisplay("Reading Database...", 20, VAL(MID$(colour$, 25, 2)), VAL(MID$(colour$, 27, 2)), 1)
+        CALL updatedbrecnum(file$ + ".db", s%)
+        CALL promptdisplay("", 20, 0, 0, 1)
+        IF s% = 0 THEN
+                detail$(l%, 1) = curname$
+                detail$(l%, 0) = curnum$
+                GOTO failedchoose
+        END IF
+        FOR i% = l% - 1 TO 1 STEP -1
+                detail$(i%, 0) = ""
+                detail$(i%, 1) = ""
+        NEXT
+ELSEIF selection% = n% - 1 THEN
+        detail$(l%, 1) = ""
+        detail$(l%, 0) = ""
+        file$ = LEFT$(path$, LEN(path$) - 1)
+        FOR i% = 5 TO l% + 1 STEP -1
+                file$ = file$ + "\" + detail$(i%, 0)
+        NEXT
+        IF l% + 1 = 6 THEN file$ = path$ + "uk"
+        CALL promptdisplay("Reading Database...", 20, VAL(MID$(colour$, 25, 2)), VAL(MID$(colour$, 27, 2)), 1)
+        CALL updatedbrecnum(file$ + ".db", s%)
+        CALL promptdisplay("", 20, 0, 0, 1)
+        IF s% = 0 THEN
+                detail$(l%, 1) = curname$
+                detail$(l%, 0) = curnum$
+                GOTO failedchoose
+        END IF
+END IF
+
+CALL ruboutmenu(4, t%, n%)
+CALL displaysublevels(1, "", "")
+IF selection% <> n% THEN sel% = 10 ELSE sel% = 0
+EXIT SUB
+
+failedchoose:
+RESTORE UnSuccessful
+READ al$
+CALL alertbox(15, 3, yn$)
+CALL ruboutmenu(4, t%, n%)
+END SUB
+
+SUB commentoptions (startyear%, endyear%, startmonth%, endmonth%)
+
+FOR i% = 1 TO 6
+        IF detail$(i%, 0) = "" THEN l% = i% + 1
+NEXT
+IF l% = 0 THEN l% = 1
+t% = 20
+IF l% <> 1 THEN
+        RESTORE CantComment
+        READ al$
+        CALL alertbox(15, 2, yesorno$)
+        EXIT SUB
+END IF
+
+RESTORE CommentData
+FOR i% = 1 TO 3
+        READ option$(i%)
+NEXT
+option$(0) = "Comments"
+CALL menu(3, selection%, 4, t%, 25, 0)
+
+IF selection% = 1 THEN
+        CALL displaycomments(startyear%, endyear%, startmonth%, endmonth%)
+ELSEIF selection% = 2 THEN
+        CALL printcomments(startyear%, endyear%, startmonth%, endmonth%)
+END IF
+CALL ruboutmenu(4, t%, 3)
+
+END SUB
+
+SUB details (chooselevel%)
+
+DO
+IF chooselevel% <> 1 THEN
+        RESTORE DetailsMenu
+        FOR i% = 1 TO 10
+                READ z$
+                IF i% = 6 THEN GOTO flarp
+                a$ = LEFT$(z$, INSTR(z$, "|") - 1)
+                b$ = MID$(z$, INSTR(z$, "|") + 1)
+                IF i% = 5 THEN
+                        a$ = LEFT$(a$, INSTR(a$, "*") - 1) + getlevel$(chooselevel%, 1, 1) + MID$(a$, INSTR(a$, "*") + 1)
+                        b$ = LEFT$(b$, INSTR(b$, "*") - 1) + getlevel$(chooselevel%, 1, 0) + MID$(b$, INSTR(b$, "*") + 1)
+                        b$ = LEFT$(b$, INSTR(b$, "#") - 1) + getlevel$(chooselevel% + 1, 0, 0) + MID$(b$, INSTR(b$, "#") + 1)
+                        IF chooselevel% = 3 THEN
+                                b$ = LEFT$(b$, INSTR(b$, "In") - 1) + "Under" + MID$(b$, INSTR(b$, "In") + 2)
+                        END IF
+                ELSEIF i% = 9 THEN
+                        a$ = LEFT$(a$, INSTR(a$, "*") - 1) + getlevel$(chooselevel% + 1, 0, 1) + MID$(a$, INSTR(a$, "*") + 1)
+                        b$ = LEFT$(b$, INSTR(b$, "*") - 1) + getlevel$(chooselevel% + 1, 0, 0) + MID$(b$, INSTR(b$, "*") + 1)
+                ELSEIF i% = 10 THEN
+                ELSE
+                        a$ = LEFT$(a$, INSTR(a$, "*") - 1) + getlevel$(chooselevel%, 0, 1) + MID$(a$, INSTR(a$, "*") + 1)
+                        b$ = LEFT$(b$, INSTR(b$, "*") - 1) + getlevel$(chooselevel%, 0, 0) + MID$(b$, INSTR(b$, "*") + 1)
+                END IF
+                option$(i%) = a$ + "|" + b$
+flarp:
+        NEXT
+        SELECT CASE chooselevel%
+        CASE 2
+        option$(6) = "Branch Manager|Branch Manager Details"
+        CASE 3
+        option$(6) = "Snr Branch Manager|Senior Branch Manager Details"
+        CASE 4
+        option$(6) = "Regional Dir|Regional Director Details"
+        CASE 5
+        option$(6) = "National|Managing Director Details"
+        END SELECT
+ELSE
+        RESTORE AdviserDetailsMenu
+        FOR i% = 1 TO 10
+                READ option$(i%)
+        NEXT
+END IF
+
+option$(0) = getlevel$(chooselevel%, 0, 1) + " Options"
+CALL menu(10, selection%, 4, 20, 25, 0)
+IF chooselevel% = 1 THEN
+        ON selection% GOSUB Choose, DoAdd, Delete, Terminate, Change, DoList, Manager, Export, Import
+ELSE
+        ON selection% GOSUB Choose, DoAdd, Delete, Change, DoList, Manager, Export, Import, compile
+END IF
+LOOP UNTIL selection% = 10
+CALL ruboutmenu(4, 20, 10)
+EXIT SUB
+
+Choose:
+CALL chooseagent(chooselevel%, selection%)
+RETURN
+DoAdd:
+CALL addagent(chooselevel%)
+RETURN
+Delete:
+CALL deleteagent(chooselevel%)
+RETURN
+Terminate:
+CALL termagent(chooselevel%)
+RETURN
+Change:
+CALL changeagent(chooselevel%)
+RETURN
+DoList:
+CALL listagents(chooselevel%, selection%)
+RETURN
+Manager:
+CALL managerdetails(chooselevel%)
+RETURN
+Export:
+CALL exportdb(chooselevel%)
+RETURN
+Import:
+CALL importdb(chooselevel%)
+RETURN
+compile:
+CALL compiledb(chooselevel%, 0)
+RETURN
+
+END SUB
+
+SUB displayagentlist (l%, s%, sel%)
+
+p$ = path$
+
+FOR i% = 5 TO l% + 1 STEP -1
+        p$ = p$ + detail$(i%, 0) + "\"
+NEXT
+
+g$ = LCASE$(getlevel$(l% + 1, 0, 1))
+IF g$ = "snr branch" THEN g$ = "area"
+CALL readconfig(p$ + g$ + ".cfg", n%, a$, b$, retry%)
+IF retry% = 0 THEN GOTO failedscrlist
+g$ = LCASE$(getlevel$(l%, 0, 1))
+IF g$ = "snr branch" THEN g$ = "area"
+filename$ = p$ + g$ + ".dat"
+IF s% = 1 THEN filename$ = p$ + g$ + "t.dat"
+
+CALL openfile(filename$, 1, "R", 32, retry%)
+IF retry% = 0 THEN GOTO failedscrlist
+IF s% = 1 THEN num% = LOF(1) / 32 ELSE num% = n%
+IF num% = 0 THEN GOTO noagents
+IF num% < 18 THEN
+        m% = 1
+ELSE
+        IF num% MOD 17 <> 0 THEN
+                m% = INT(num% / 17) + 1
+        ELSE
+                m% = INT(num% / 17)
+        END IF
+        n% = 17
+END IF
+CLS
+sel% = 10
+LOCATE 1, 73: PRINT "ACTIVITY";
+name$ = detail$(l%, 1)
+num$ = detail$(l%, 0)
+detail$(l%, 1) = ""
+detail$(l%, 0) = ""
+CALL displaysublevels(1, levelpath1$, levelpath2$)
+detail$(l%, 1) = name$
+detail$(l%, 0) = num$
+
+FOR b% = 1 TO m%
+c% = 1
+LOCATE 2, 3: PRINT CHR$(201); STRING$(39, 205); CHR$(209); STRING$(34, 205); CHR$(187);
+LOCATE 3, 3: PRINT CHR$(186); : LOCATE 3, 43: PRINT CHR$(179); : LOCATE 3, 78: PRINT CHR$(186);
+LOCATE 4, 3: PRINT CHR$(199); STRING$(39, 196); CHR$(197); STRING$(34, 196); CHR$(182);
+LOCATE 3, 18
+PRINT getlevel$(l%, 0, 0) + " Name";
+LOCATE 3, 55
+PRINT getlevel$(l%, 0, 0) + " Number";
+IF b% = m% THEN
+        n% = num%
+ELSE
+        n% = 17 * b%
+END IF
+FOR i% = 1 + ((b% - 1) * 17) TO n%
+        CALL getrandom(1, 1, i%, retry%)
+        IF retry% = 0 THEN GOTO failedscrlist
+        c% = c% + 1
+        LOCATE c% + 3, 3: PRINT CHR$(186); : LOCATE c% + 3, 43: PRINT CHR$(179); : LOCATE c% + 3, 78: PRINT CHR$(186);
+        LOCATE c% + 3, 3 + (40 - LEN(LTRIM$(RTRIM$(decrypt$(agentsinteam.agentname))))) / 2
+        PRINT LTRIM$(RTRIM$(decrypt$(agentsinteam.agentname)))
+        LOCATE c% + 3, 41 + (39 - LEN(LTRIM$(RTRIM$(decrypt$(agentsinteam.agentnumber))))) / 2
+        PRINT LTRIM$(RTRIM$(decrypt$(agentsinteam.agentnumber)))
+NEXT
+LOCATE c% + 4, 1: PRINT "  "; CHR$(200); STRING$(39, 205); CHR$(207); STRING$(34, 205); CHR$(188);
+IF b% < m% THEN
+        CALL promptdisplay("Space Bar For More, Esc For Main Menu", 24, VAL(MID$(colour$, 25, 2)), VAL(MID$(colour$, 27, 2)), 1)
+        DO
+                key$ = INKEY$
+        LOOP UNTIL key$ = " " OR key$ = CHR$(27)
+        IF ASC(key$) = 27 THEN CLOSE #1: CLS : EXIT SUB
+ELSE
+        CALL promptdisplay("Any Key For Main Menu", 24, VAL(MID$(colour$, 25, 2)), VAL(MID$(colour$, 27, 2)), 1)
+END IF
+NEXT
+CLOSE #1
+DO
+LOOP UNTIL INKEY$ <> ""
+CLS
+EXIT SUB
+
+noagents:
+CLOSE
+RESTORE NoDataAvailable
+READ al$
+CALL alertbox(15, 2, yn$)
+EXIT SUB
+
+failedscrlist:
+CLOSE
+RESTORE UnSuccessful
+READ al$
+CALL alertbox(15, 3, yn$)
+s% = 0
+END SUB
+
+SUB displaysublevels (disp%, levelpath1$, levelpath2$)
+
+FOR i% = 6 TO 1 STEP -1
+        IF detail$(i%, 1) <> "" THEN level% = i%
+NEXT
+
+promptfore% = VAL(MID$(colour$, 25, 2))
+promptback% = VAL(MID$(colour$, 27, 2))
+
+IF level% < 6 THEN
+        reg$ = LEFT$(detail$(5, 1), 1)
+        FOR i% = 1 TO LEN(detail$(5, 1))
+                IF MID$(detail$(5, 1), i%, 1) = " " THEN reg$ = reg$ + MID$(detail$(5, 1), i% + 1, 1)
+        NEXT
+        reg$ = reg$ + " Region"
+        IF level% < 5 THEN
+                are$ = LEFT$(detail$(4, 1), 1)
+                FOR i% = 1 TO LEN(detail$(4, 1))
+                        IF MID$(detail$(4, 1), i%, 1) = " " THEN are$ = are$ + MID$(detail$(4, 1), i% + 1, 1)
+                NEXT
+                IF LEN(are$) = 1 THEN are$ = LEFT$(detail$(4, 1), 3)
+                are$ = are$ + " Snr Branch"
+                IF level% < 4 THEN
+                        bra$ = LEFT$(detail$(3, 1), 1)
+                        FOR i% = 1 TO LEN(detail$(3, 1))
+                                IF MID$(detail$(3, 1), i%, 1) = " " THEN bra$ = bra$ + MID$(detail$(3, 1), i% + 1, 1)
+                        NEXT
+                        IF LEN(bra$) = 1 THEN bra$ = LEFT$(detail$(3, 1), 3)
+                        bra$ = bra$ + " Branch"
+                        IF level% < 3 THEN
+                                tea$ = detail$(2, 1)
+                                IF tea$ <> "" THEN tea$ = tea$ + " Team"
+                                IF level% < 2 THEN
+                                        age$ = detail$(1, 1)
+                                END IF
+                        END IF
+                END IF
+        END IF
+ELSE
+        reg$ = detail$(6, 1)
+END IF
+
+levelpath1$ = reg$ + " - " + are$ + " - " + bra$
+levelpath2$ = tea$ + " - " + age$
+
+IF RIGHT$(levelpath1$, 3) = " - " THEN levelpath1$ = LEFT$(levelpath1$, LEN(levelpath1$) - 3)
+IF RIGHT$(levelpath1$, 3) = " - " THEN levelpath1$ = LEFT$(levelpath1$, LEN(levelpath1$) - 3)
+IF RIGHT$(levelpath2$, 3) = " - " THEN levelpath2$ = LEFT$(levelpath2$, LEN(levelpath2$) - 3)
+
+IF d% = 1 THEN
+        CALL promptdisplay(levelpath1$, 23, promptfore%, promptback%, 1)
+        CALL promptdisplay(levelpath2$, 24, promptfore%, promptback%, 1)
+END IF
+
+END SUB
+
+SUB getmousestate (button%, xmouse%, ymouse%)
+
+inreg.ax = 3
+CALL interrupt(&H33, inreg, outreg)
+button% = outreg.bx
+xmouse% = outreg.cx
+ymouse% = outreg.dx
+
+IF button% <> 0 THEN
+        DO
+                'CALL interrupt(&H33, inreg, outreg)
+        LOOP UNTIL outreg.bx = 0
+END IF
+
+END SUB
+
+SUB listagents (l%, sel%)
+
+IF l% = 4 THEN
+        t% = 43
+ELSEIF l% = 2 THEN
+        t% = 37
+ELSEIF l% = 1 THEN
+        t% = 40
+ELSE
+        t% = 39
+END IF
+
+CALL cascadecheck(l%, numberofdbs%, filename$, ret%, 0, s%)
+IF s% = 0 THEN GOTO failedlist
+IF ret% <> 0 THEN EXIT SUB
+
+again2:
+IF l% = 1 THEN
+        RESTORE AgentListData
+        FOR i% = 1 TO 3
+                READ option$(i%)
+        NEXT
+        option$(0) = "Adviser List"
+        CALL menu(3, selection%, 4, t%, 25, 0)
+        CALL ruboutmenu(4, t%, 3)
+        IF selection% = 3 THEN EXIT SUB
+        term% = selection% - 1
+END IF
+
+RESTORE AgentListData2
+FOR i% = 1 TO 3
+        READ option$(i%)
+NEXT
+option$(0) = getlevel$(l%, 0, 0) + " List"
+CALL menu(3, selection%, 4, t%, 25, 0)
+
+IF selection% = 3 AND l% = 1 THEN
+        GOTO again2
+ELSEIF selection% = 3 THEN
+        CALL ruboutmenu(4, t%, 3)
+        EXIT SUB
+END IF
+
+IF selection% = 1 THEN
+        CALL displayagentlist(l%, term%, sel%)
+ELSE
+        CALL printagentlist(l%, term%)
+END IF
+CALL ruboutmenu(4, t%, 3)
+
+EXIT SUB
+
+failedlist:
+RESTORE UnSuccessful
+READ al$
+CALL alertbox(15, 3, yn$)
+END SUB
+
+SUB managerdetails (l%)
+
+CALL cascadecheck(l%, numberofdbs%, filename$, ret%, 1, s%)
+IF s% = 0 THEN GOTO failedman
+IF ret% <> 0 THEN EXIT SUB
+p$ = path$
+FOR i% = 5 TO l% + 1 STEP -1
+        p$ = p$ + detail$(i%, 0) + "\"
+NEXT
+g$ = LCASE$(getlevel$(l% + 1, 0, 1))
+IF g$ = "snr branch" THEN g$ = "area"
+CALL readconfig(p$ + g$ + ".cfg", n%, man1$, man2$, s%)
+IF s% = 0 THEN GOTO failedman
+
+RESTORE ManBoxData
+READ t$, i$
+i$ = man1$ + LEFT$(i$, INSTR(i$, "|")) + man2$ + MID$(i$, INSTR(i$, "|") + 1)
+oldi$ = man1$ + "|" + man2$
+CALL dialogbox(t$, i$, 2, 15)
+IF i$ = oldi$ THEN EXIT SUB
+manname$ = LEFT$(i$, INSTR(i$, "|") - 1)
+mannum$ = MID$(i$, INSTR(i$, "|") + 1)
+IF t$ = "esc" THEN EXIT SUB
+
+IF l% = 1 THEN
+CALL checkexist(l%, manname$, mannum$, exist%, s%)
+IF s% = 0 THEN GOTO failedman
+SELECT CASE exist%
+        CASE 0
+        CALL promptdisplay("Creating Manager...", 20, VAL(MID$(colour$, 25, 2)), VAL(MID$(colour$, 27, 2)), 1)
+        IF numberofdbs% + 1 <= 30 THEN
+                CALL makeagent(l%, manname$, mannum$, s%)
+                n% = n% + 1
+                CALL promptdisplay("", 20, 0, 0, 1)
+                IF s% = 0 THEN GOTO failedman
+        END IF
+        CASE 4, 6
+        RESTORE TermMan
+        READ al$
+        al$ = LEFT$(al$, INSTR(al$, "*") - 1) + getlevel$(l%, 0, 0) + MID$(al$, INSTR(al$, "*") + 1)
+        al$ = LEFT$(al$, INSTR(al$, "*") - 1) + getlevel$(l%, 1, 0) + MID$(al$, INSTR(al$, "*") + 1)
+        CALL alertbox(15, 3, yn$)
+        CASE ELSE
+END SELECT
+END IF
+
+CALL promptdisplay("Creating Manager...", 20, VAL(MID$(colour$, 25, 2)), VAL(MID$(colour$, 27, 2)), 1)
+CALL writeconfig(p$ + g$ + ".cfg", n%, manname$, mannum$, s%)
+IF s% = 0 THEN GOTO failedman
+CALL promptdisplay("", 20, 0, 0, 1)
+EXIT SUB
+
+failedman:
+RESTORE UnSuccessful
+READ al$
+CALL alertbox(15, 3, yn$)
+END SUB
+
+SUB menu (numberofoptions%, selection%, top%, t%, promptline%, rubout%)
+
+'option$ is a string array of the menu options
+'optionprompt$ is the array of corresponding prompts
+'option$(0) is the menu title
+'colour$ is a string "aabbccddeeffgghhiijjkkllmmnnooppqqrr" where
+'ee,ff are border fore,back
+'gg,hh are text fore,back
+'ii,jj are title fore,back
+'kk,ll are hilite fore,back
+'mm,nn are prompt fore,back
+'(top%,t%) are the top left coords of the menu (box)
+'selection% is returned - the menu choice - Esc (right click) for last option
+'mouse%=1 indicates mouse is present
+
+KEY(1) ON
+
+        DIM optionprompt$(numberofoptions%)
+        FOR i% = 1 TO numberofoptions%
+                optionprompt$(i%) = MID$(option$(i%), INSTR(option$(i%), "|") + 1)
+                option$(i%) = LEFT$(option$(i%), INSTR(option$(i%), "|") - 1)
+        NEXT
+
+        topselection% = 1
+        titleline% = VAL(optionprompt$(0))
+        borderfore% = VAL(MID$(colour$, 9, 2))
+        borderback% = VAL(MID$(colour$, 11, 2))
+        textfore% = VAL(MID$(colour$, 13, 2))
+        textback% = VAL(MID$(colour$, 15, 2))
+        titlefore% = VAL(MID$(colour$, 17, 2))
+        titleback% = VAL(MID$(colour$, 19, 2))
+        hilitefore% = VAL(MID$(colour$, 21, 2))
+        hiliteback% = VAL(MID$(colour$, 23, 2))
+        promptfore% = VAL(MID$(colour$, 25, 2))
+        promptback% = VAL(MID$(colour$, 27, 2))
+  
+        b% = borderfore% + 16: IF b% > 31 THEN b% = borderfore%
+        longestoption% = 0
+        FOR i% = 0 TO numberofoptions%
+                IF LEN(option$(i%)) > longestoption% THEN longestoption% = LEN(option$(i%))
+        NEXT
+        IF longestoption% < LEN(option$(0)) + 4 THEN longestoption% = LEN(option$(0)) + 4
+        IF top% < 2 THEN top% = 2
+        IF top% > 22 THEN top% = 22
+        IF t% < 1 THEN t% = 1
+        IF t% + longestoption% > 78 THEN t% = 78 - longestoption%
+        IF top% + numberofoptions% + 2 <= 25 THEN n% = numberofoptions% ELSE n% = 25 - top% - 2
+  
+        sensitivity% = 20
+
+        COLOR textfore%, textback%
+        LOCATE top%
+        FOR a% = 1 TO n%
+                LOCATE a% + top%, t% + 1: PRINT option$(a%); SPACE$(longestoption% - LEN(option$(a%)));
+        NEXT
+
+        COLOR borderfore%, borderback%
+        LOCATE top%, t%
+        PRINT CHR$(201); STRING$(longestoption%, 205); CHR$(187);
+        FOR a% = 1 TO n%
+                LOCATE a% + top%, t%: PRINT CHR$(186);
+                LOCATE a% + top%, t% + longestoption% + 1: PRINT CHR$(186);
+        NEXT
+        LOCATE n% + top% + 1, t%
+        IF n% = numberofoptions% THEN
+                PRINT CHR$(200); STRING$(longestoption%, 205); CHR$(188);
+        ELSE
+                PRINT CHR$(200);
+                COLOR b%, borderback%
+                PRINT CHR$(25);
+                COLOR borderfore%, borderback%
+                PRINT STRING$(longestoption% - 2, 205);
+                COLOR b%, borderback%
+                PRINT CHR$(25);
+                COLOR borderfore%, borderback%
+                PRINT CHR$(188);
+        END IF
+        COLOR titlefore%, titleback%
+        LOCATE top%, t% + 2: PRINT " "; option$(0); " ";
+
+        selection% = 1
+        topselection% = 1
+        LOCATE top% + 1, t% + 1
+        COLOR hilitefore%, hiliteback%: PRINT option$(selection%); SPACE$(longestoption% - LEN(option$(selection%)));
+
+again:
+        start% = 1
+        IF pr% = 0 THEN CALL promptdisplay("", 25, promptfore%, promptback%, 1)
+        DO
+        IF pr% = 1 THEN
+                CALL promptdisplay(optionprompt$(selection%), promptline%, promptfore%, promptback%, 1)
+                pr% = 0
+        END IF
+        IF mouse% = 1 AND start% = 1 THEN CALL setmousepos(50, 50): start% = 2
+        key$ = INKEY$
+        IF mouse% = 1 THEN CALL getmousestate(button%, xmouse%, ymouse%)
+        LOOP UNTIL key$ <> "" OR (mouse% = 1 AND (ymouse% > 50 + sensitivity% OR ymouse% < 50 - sensitivity% OR button% <> 0))
+        IF key$ = "" THEN key$ = CHR$(0) + CHR$(0)
+ 
+        IF ASC(key$) = 0 THEN
+        key$ = MID$(key$, 2)
+                IF ASC(key$) + 500 = 580 OR ASC(key$) + 500 = 577 OR ymouse% > 50 + sensitivity% THEN
+                        selection% = selection% + 1
+                        GOSUB shuffledown
+                ELSEIF ASC(key$) + 500 = 572 OR ASC(key$) + 500 = 575 OR ymouse% < 50 - sensitivity% THEN
+                        selection% = selection% - 1
+                        GOSUB shuffleup
+                END IF
+        END IF
+        IF ASC(key$) <> 13 AND button% <> 1 AND button% <> 2 AND ASC(key$) <> 27 THEN button% = 0: GOTO again
+        IF ASC(key$) = 27 OR button% = 2 THEN selection% = numberofoptions%: button% = 0
+IF rubout% = 1 THEN
+FOR i% = 0 TO n% + 1
+        LOCATE top% + i%, t%: PRINT SPACE$(longestoption% + 2)
+NEXT
+END IF
+KEY(1) OFF
+EXIT SUB
+
+shuffleup:
+IF selection% < 1 THEN
+        topselection% = numberofoptions% - n% + 1
+        selection% = numberofoptions%
+        COLOR textfore%, textback%
+        FOR a% = 1 TO n% - 1
+                LOCATE top% + a%, t% + 1: PRINT option$(topselection% - 1 + a%); SPACE$(longestoption% - LEN(option$(topselection% - 1 + a%)));
+        NEXT
+        COLOR hilitefore%, hiliteback%: LOCATE top% + n%, t% + 1: PRINT option$(selection%); SPACE$(longestoption% - LEN(option$(selection%)));
+        COLOR borderfore%, borderback%
+        LOCATE top%, t%
+        IF n% = numberofoptions% THEN
+                PRINT CHR$(201); STRING$(longestoption%, 205); CHR$(187);
+        ELSE
+                PRINT CHR$(201);
+                COLOR b%, borderback%
+                PRINT CHR$(24);
+                COLOR borderfore%, borderback%
+                PRINT STRING$(longestoption% - 2, 205);
+                COLOR b%, borderback%
+                PRINT CHR$(24);
+                COLOR borderfore%, borderback%
+                PRINT CHR$(187);
+        END IF
+        LOCATE top% + n% + 1, t%
+        IF n% = numberofoptions% - topselection% + 1 THEN
+                PRINT CHR$(200); STRING$(longestoption%, 205); CHR$(188);
+        ELSE
+                PRINT CHR$(200);
+                COLOR b%, borderback%
+                PRINT CHR$(25);
+                COLOR borderfore%, borderback%
+                PRINT STRING$(longestoption% - 2, 205);
+                COLOR b%, borderback%
+                PRINT CHR$(25);
+                COLOR borderfore%, borderback%
+                PRINT CHR$(188);
+        END IF
+        COLOR titlefore%, titleback%
+        LOCATE top%, t% + 2: PRINT " "; option$(0); " ";
+        RETURN
+END IF
+IF selection% < topselection% THEN
+        topselection% = topselection% - 1
+        COLOR hilitefore%, hiliteback%: LOCATE top% + 1, t% + 1: PRINT option$(selection%); SPACE$(longestoption% - LEN(option$(selection%)));
+        COLOR textfore%, textback%
+        FOR a% = 2 TO n%
+                LOCATE top% + a%, t% + 1: PRINT option$(selection% + a% - 1); SPACE$(longestoption% - LEN(option$(selection% + a% - 1)));
+        NEXT
+        COLOR borderfore%, borderback%
+        LOCATE top%, t%
+        IF topselection% = 1 THEN
+                PRINT CHR$(201); STRING$(longestoption%, 205); CHR$(187);
+        ELSE
+                PRINT CHR$(201);
+                COLOR b%, borderback%
+                PRINT CHR$(24);
+                COLOR borderfore%, borderback%
+                PRINT STRING$(longestoption% - 2, 205);
+                COLOR b%, borderback%
+                PRINT CHR$(24);
+                COLOR borderfore%, borderback%
+                PRINT CHR$(187);
+        END IF
+        LOCATE top% + n% + 1, t%
+        IF n% = numberofoptions% - topselection% + 1 THEN
+                PRINT CHR$(200); STRING$(longestoption%, 205); CHR$(188);
+        ELSE
+                PRINT CHR$(200);
+                COLOR b%, borderback%
+                PRINT CHR$(25);
+                COLOR borderfore%, borderback%
+                PRINT STRING$(longestoption% - 2, 205);
+                COLOR b%, borderback%
+                PRINT CHR$(25);
+                COLOR borderfore%, borderback%
+                PRINT CHR$(188);
+        END IF
+        COLOR titlefore%, titleback%
+        LOCATE top%, t% + 2: PRINT " "; option$(0); " ";
+        RETURN
+END IF
+COLOR textfore%, textback%
+LOCATE top% + selection% - topselection% + 2, t% + 1: PRINT option$(selection% + 1); SPACE$(longestoption% - LEN(option$(selection% + 1)));
+COLOR hilitefore%, hiliteback%
+LOCATE top% + selection% - topselection% + 1, t% + 1: PRINT option$(selection%); SPACE$(longestoption% - LEN(option$(selection%)));
+RETURN
+
+shuffledown:
+IF selection% > numberofoptions% THEN
+        topselection% = 1
+        selection% = 1
+        COLOR hilitefore%, hiliteback%: LOCATE top% + 1, t% + 1: PRINT option$(selection%); SPACE$(longestoption% - LEN(option$(selection%)));
+        COLOR textfore%, textback%
+        FOR a% = 2 TO n%
+                LOCATE top% + a%, t% + 1: PRINT option$(a%); SPACE$(longestoption% - LEN(option$(a%)));
+        NEXT
+        LOCATE top% + n% + 1, t%
+        COLOR borderfore%, borderback%
+        IF n% = numberofoptions% THEN
+                PRINT CHR$(200); STRING$(longestoption%, 205); CHR$(188);
+        ELSE
+                PRINT CHR$(200);
+                COLOR b%, borderback%
+                PRINT CHR$(25);
+                COLOR borderfore%, borderback%
+                PRINT STRING$(longestoption% - 2, 205);
+                COLOR b%, borderback%
+                PRINT CHR$(25);
+                COLOR borderfore%, borderback%
+                PRINT CHR$(188);
+        END IF
+        LOCATE top%, t%
+        IF topselection% = 1 THEN
+                PRINT CHR$(201); STRING$(longestoption%, 205); CHR$(187);
+        ELSE
+                PRINT CHR$(201);
+                COLOR b%, borderback%
+                PRINT CHR$(24);
+                COLOR borderfore%, borderback%
+                PRINT STRING$(longestoption% - 2, 205);
+                COLOR b%, borderback%
+                PRINT CHR$(24);
+                COLOR borderfore%, borderback%
+                PRINT CHR$(187);
+        END IF
+        COLOR titlefore%, titleback%
+        LOCATE top%, t% + 2: PRINT " "; option$(0); " ";
+        RETURN
+END IF
+IF selection% > topselection% + n% - 1 THEN
+        topselection% = topselection% + 1
+        COLOR textfore%, textback%
+        FOR a% = 1 TO n% - 1
+                LOCATE top% + a%, t% + 1: PRINT option$(topselection% + a% - 1); SPACE$(longestoption% - LEN(option$(topselection% + a% - 1)));
+        NEXT
+        COLOR hilitefore%, hiliteback%: LOCATE top% + n%, t% + 1: PRINT option$(selection%); SPACE$(longestoption% - LEN(option$(selection%)));
+        LOCATE top% + n% + 1, t%
+        COLOR borderfore%, borderback%
+        IF n% = numberofoptions% - topselection% + 1 THEN
+                PRINT CHR$(200); STRING$(longestoption%, 205); CHR$(188);
+        ELSE
+                PRINT CHR$(200);
+                COLOR b%, borderback%
+                PRINT CHR$(25);
+                COLOR borderfore%, borderback%
+                PRINT STRING$(longestoption% - 2, 205);
+                COLOR b%, borderback%
+                PRINT CHR$(25);
+                COLOR borderfore%, borderback%
+                PRINT CHR$(188);
+        END IF
+        LOCATE top%, t%
+        IF topselection% = 1 THEN
+                PRINT CHR$(201); STRING$(longestoption%, 205); CHR$(187);
+        ELSE
+                PRINT CHR$(201);
+                COLOR b%, borderback%
+                PRINT CHR$(24);
+                COLOR borderfore%, borderback%
+                PRINT STRING$(longestoption% - 2, 205);
+                COLOR b%, borderback%
+                PRINT CHR$(24);
+                COLOR borderfore%, borderback%
+                PRINT CHR$(187);
+        END IF
+        COLOR titlefore%, titleback%
+        LOCATE top%, t% + 2: PRINT " "; option$(0); " ";
+        RETURN
+END IF
+COLOR textfore%, textback%
+LOCATE top% + selection% - topselection%, t% + 1
+PRINT option$(selection% - 1); SPACE$(longestoption% - LEN(option$(selection% - 1)));
+COLOR hilitefore%, hiliteback%
+LOCATE top% + selection% - topselection% + 1, t% + 1
+PRINT option$(selection%); SPACE$(longestoption% - LEN(option$(selection%)));
+RETURN
+
+END SUB
+
+SUB otheroptions
+
+IF masterlev% > 3 THEN t% = 23 ELSE t% = 20
+DO
+RESTORE OtherMenu
+option$(0) = "Other Options"
+FOR i% = 1 TO 6
+        READ option$(i%)
+NEXT
+CALL menu(6, selection%, 4, t%, 25, 0)
+ON selection% GOSUB setdefs, diskbackup, diskrestore, setcols, resetcols
+LOOP UNTIL selection% = 6
+CALL ruboutmenu(4, t%, 6)
+EXIT SUB
+
+setdefs:
+CALL setdefaults
+selection% = 6
+RETURN
+
+diskbackup:
+CALL backupdata
+selection% = 6
+RETURN
+
+diskrestore:
+CALL restoredata
+selection% = 6
+RETURN
+
+setcols:
+CALL setcolours
+selection% = 6
+RETURN
+
+resetcols:
+CALL resetcols
+selection% = 6
+RETURN
+
+END SUB
+
+SUB printagentlist (l%, s%)
+
+p$ = path$
+
+FOR i% = 5 TO l% + 1 STEP -1
+        p$ = p$ + detail$(i%, 0) + "\"
+NEXT
+
+g$ = LCASE$(getlevel$(l% + 1, 0, 1))
+IF g$ = "snr branch" THEN g$ = "area"
+CALL readconfig(p$ + g$ + ".cfg", n%, a$, b$, retry%)
+IF retry% = 0 THEN GOTO failedprintlist
+g$ = LCASE$(getlevel$(l%, 0, 1))
+IF g$ = "snr branch" THEN g$ = "area"
+filename$ = p$ + g$ + ".dat"
+IF s% = 1 THEN filename$ = p$ + g$ + "t.dat"
+
+i% = 1
+page% = 1
+IF n% / 45 = INT(n% / 45) THEN maxpage% = n% / 45 ELSE maxpage% = INT(n% / 45) + 1
+IF n% < 45 THEN maxpage% = 1
+CALL openfile(filename$, 1, "R", 32, retry%)
+IF retry% = 0 THEN GOTO failedprintlist
+IF s% = 1 AND LOF(1) = 0 THEN GOTO noagents2
+info$ = getlevel$(l%, 0, 0) + " List"
+IF s% = 1 THEN
+        info$ = "Terminated " + info$
+ELSE
+        info$ = "Current " + info$
+END IF
+CALL checkprinter(retry%)
+IF retry% = 1 THEN
+CALL promptdisplay("Printing " + getlevel$(l%, 0, 0) + " List...", 20, VAL(MID$(colour$, 25, 2)), VAL(MID$(colour$, 27, 2)), 1)
+LPRINT CHR$(27); "6";
+GOSUB HeaderPrint
+
+newpage:
+LPRINT CHR$(13); CHR$(13); CHR$(13);
+LPRINT SPACE$(2); CHR$(201); STRING$(74, 205); CHR$(187); SPACE$(2);
+DO
+        CALL getrandom(1, 1, i%, retry%)
+        IF retry% = 0 THEN LPRINT CHR$(12); : GOTO failedprintlist
+        a$ = decrypt$(agentsinteam.agentname)
+        b$ = decrypt$(agentsinteam.agentnumber)
+        s% = 37 - LEN(RTRIM$(LTRIM$(a$))) + 1
+        r% = 36 - LEN(RTRIM$(LTRIM$(b$))) + 1
+        LPRINT SPACE$(2); CHR$(186); SPACE$(s% / 2); RTRIM$(LTRIM$(a$)); SPACE$(37 - s% / 2 - LEN(RTRIM$(LTRIM$(a$)))); CHR$(179); SPACE$(r% / 2); LTRIM$(RTRIM$(b$)); SPACE$(36 - r% / 2 - LEN(RTRIM$(LTRIM$(b$)))); CHR$(186); SPACE$(2);
+        i% = i% + 1
+LOOP UNTIL i% > n% OR (i% MOD 45 = 0 AND page% <= maxpage%)
+LPRINT SPACE$(2); CHR$(200); STRING$(74, 205); CHR$(188); SPACE$(2);
+IF (i% MOD 45) <> 0 THEN
+        FOR z% = 1 TO 48 - (i% MOD 45)
+                LPRINT CHR$(13);
+        NEXT
+ELSE
+        LPRINT CHR$(13); CHR$(13); CHR$(13);
+END IF
+IF maxpage% > 1 THEN
+        LPRINT SPACE$(2); MID$(DATE$, 4, 2); "/"; LEFT$(DATE$, 2); "/"; RIGHT$(DATE$, 4); SPACE$(59); LTRIM$(STR$(page%)); SPACE$(9 - LEN(LTRIM$(STR$(page%))));
+ELSE
+        LPRINT SPACE$(2); MID$(DATE$, 4, 2); "/"; LEFT$(DATE$, 2); "/"; RIGHT$(DATE$, 4); SPACE$(68);
+END IF
+LPRINT CHR$(12);
+
+IF i% <= n% THEN
+        GOSUB HeaderPrint
+        page% = page% + 1: GOTO newpage
+END IF
+CALL promptdisplay("", 20, 0, 0, 1)
+
+END IF
+CLOSE #1
+EXIT SUB
+
+noagents2:
+CLOSE
+CALL promptdisplay("", 20, 0, 0, 1)
+RESTORE NoDataAvailable
+READ al$
+CALL alertbox(15, 2, yn$)
+EXIT SUB
+
+failedprintlist:
+CLOSE
+CALL promptdisplay("", 20, 0, 0, 1)
+RESTORE UnSuccessful
+READ al$
+CALL alertbox(15, 3, yn$)
+EXIT SUB
+
+HeaderPrint:
+
+LPRINT CHR$(13); CHR$(13); CHR$(13); CHR$(13);
+LPRINT SPACE$(63); "ษออออออออออป"
+LPRINT SPACE$(63); "บ ACTIVITY บ"
+LPRINT SPACE$(63); "ศออออออออออผ"
+LPRINT CHR$(13);
+LPRINT SPACE$((80 - LEN(info$)) / 2 + 1); info$
+LPRINT CHR$(13);
+name$ = detail$(l%, 1)
+num$ = detail$(l%, 0)
+detail$(l%, 1) = ""
+detail$(l%, 0) = ""
+CALL displaysublevels(0, levelpath1$, levelpath2$)
+detail$(l%, 1) = name$
+detail$(l%, 0) = num$
+
+IF levelpath2$ <> "" THEN
+        LPRINT SPACE$((80 - LEN(levelpath1$) - LEN(levelpath2$) - 3) / 2); levelpath1$ + " - " + levelpath2$;
+ELSE
+        LPRINT SPACE$((80 - LEN(levelpath1$)) / 2); levelpath1$;
+END IF
+
+RETURN
+
+END SUB
+
+SUB promptdisplay (prompt$, promptline%, promptfore%, promptback%, clearline%)
+  
+'centres a prompt
+'if clearline%=1 then clears the prompt line first
+
+        IF promptline% < 1 OR promptline% > 25 THEN EXIT SUB
+        IF promptfore% < 0 THEN promptfore% = 0
+        IF promptfore% > 31 THEN promptfore% = 31
+        IF promptback% < 0 THEN promptback% = 0
+        IF promptback% > 7 THEN promptback% = 7
+        COLOR 15, 0
+        curline% = CSRLIN
+        IF clearline% = 1 THEN LOCATE promptline%, 1, 0: PRINT SPACE$(80);
+        COLOR promptfore%, promptback%
+        LOCATE promptline%, INT((80 - LEN(prompt$)) / 2) + 1: PRINT prompt$;
+        LOCATE curline%
+        COLOR 15, 0
+
+END SUB
+
+SUB restoredata
+
+l% = 6
+curname$ = detail$(l%, 1)
+curnum$ = detail$(l%, 0)
+
+RESTORE RestoreReady
+READ al$
+CALL alertbox(15, 2, y$)
+IF y$ = "esc" THEN EXIT SUB
+
+file$ = "A:\country.dat"
+
+CALL openfile(file$, 1, "R", 32, retry%)
+IF retry% = 0 THEN GOSUB failedrestore: EXIT SUB
+numberofdbs% = LOF(1) / 32
+CLOSE #1
+IF numberofdbs% = 0 THEN
+        RESTORE NoRestore
+        READ al$
+        CALL alertbox(15, 3, y$)
+        EXIT SUB
+END IF
+
+CALL promptdisplay("Clearing Existing Database - Please Wait...", 20, VAL(MID$(colour$, 25, 2)), VAL(MID$(colour$, 27, 2)), 1)
+p$ = path$
+CALL readconfig(p$ + "country.cfg", n%, m$, n$, s%)
+IF s% = 0 THEN GOTO failedrestore: GOTO donerestore
+CALL openfile(p$ + "region.dat", 7, "R", 32, s%)
+IF s% = 0 THEN GOTO failedrestore: GOTO donerestore
+FOR i% = 1 TO n%
+        CALL getrandom(7, 1, i%, s%)
+        IF s% = 0 THEN GOTO failedrestore: GOTO donerestore
+        num$ = LTRIM$(RTRIM$(decrypt$(agentsinteam.agentnumber)))
+        CALL nukedir(p$ + num$, 1, s%)
+        IF s% = 0 THEN GOTO failedrestore: GOTO donerestore
+        CALL killfile(p$ + num$ + ".*", s%)
+        IF s% = 0 THEN GOTO failedrestore: GOTO donerestore
+NEXT
+CLOSE #7
+
+CALL killfile(p$ + "region.dat", s%)
+IF s% = 0 THEN GOTO failedrestore: GOTO donerestore
+CALL killfile(p$ + "country.cfg", s%)
+IF s% = 0 THEN GOTO failedrestore: GOTO donerestore
+CALL killfile(p$ + "uk.*", s%)
+IF s% = 0 THEN GOTO failedrestore: GOTO donerestore
+
+CALL promptdisplay("Restoring Files - Please Wait...", 20, VAL(MID$(colour$, 25, 2)), VAL(MID$(colour$, 27, 2)), 1)
+detail$(l%, 0) = ""
+detail$(l%, 1) = ""
+CALL importengine("uk", s%)
+IF s% = 0 THEN GOSUB failedrestore
+
+donerestore:
+CALL promptdisplay("", 20, 0, 0, 1)
+detail$(l%, 1) = curname$
+detail$(l%, 0) = curnum$
+CLOSE
+EXIT SUB
+
+failedrestore:
+CLOSE
+RESTORE UnSuccessful
+READ al$
+CALL alertbox(15, 3, yesorno$)
+RETURN
+
+END SUB
+
+SUB ruboutmenu (top%, t%, numberofoptions%)
+
+        longestoption% = 0
+        FOR i% = 0 TO numberofoptions%
+                IF LEN(option$(i%)) > longestoption% THEN longestoption% = LEN(option$(i%))
+        NEXT
+        IF longestoption% < LEN(option$(0)) + 4 THEN longestoption% = LEN(option$(0)) + 4
+
+        IF top% + numberofoptions% + 2 <= 25 THEN n% = numberofoptions% ELSE n% = 25 - top% - 2
+       
+        FOR i% = top% TO top% + numberofoptions% + 1
+                LOCATE i%, t%: PRINT SPACE$(longestoption% + 2)
+        NEXT
+
+END SUB
+
+SUB setmousepos (xmouse%, ymouse%)
+
+inreg.ax = 4
+inreg.cx = xmouse%
+inreg.dx = ymouse%
+CALL interrupt(&H33, inreg, outreg)
+
+END SUB
+
+SUB termagent (l%)
+
+t% = 40
+
+CALL cascadecheck(l%, numberofdbs%, filename$, ret%, 0, s%)
+IF s% = 0 THEN GOTO failedterm
+IF ret% <> 0 THEN EXIT SUB
+CALL agentmenudata(1, n%, 0, s%)
+IF s% = 0 THEN GOTO failedterm
+option$(0) = "Terminate Adviser"
+CALL menu(n%, selection%, 4, t%, 25, 0)
+IF selection% < n% THEN
+        name$ = RTRIM$(LEFT$(option$(selection%), 25))
+        num$ = RTRIM$(RIGHT$(option$(selection%), 7))
+ELSEIF selection% = n% THEN
+        CALL ruboutmenu(4, t%, n%)
+        EXIT SUB
+END IF
+
+p$ = path$
+FOR i% = 5 TO 2 STEP -1
+        p$ = p$ + detail$(i%, 0) + "\"
+NEXT
+
+CALL promptdisplay("Terminating Adviser...", 20, VAL(MID$(colour$, 25, 2)), VAL(MID$(colour$, 27, 2)), 1)
+CALL removeagent(1, num$, s%)
+IF s% = 0 THEN GOTO failedterm
+g$ = LCASE$(getlevel$(2, 0, 1))
+CALL readconfig(p$ + g$ + ".cfg", numberofdbs%, man1$, man2$, s%)
+IF s% = 0 THEN GOTO failedterm
+CALL writeconfig(p$ + g$ + ".cfg", numberofdbs% - 1, man1$, man2$, s%)
+IF s% = 0 THEN GOTO failedterm
+CALL insertagent(0, name$, num$, s%)
+IF s% = 0 THEN GOTO failedterm
+
+CALL openfile(p$ + num$ + ".db", 1, "R", 148, s%)
+IF s% = 0 THEN GOTO failedterm
+CALL getrandom(1, 0, 1, s%)
+IF s% = 0 THEN GOTO failedterm
+ext$ = "." + MID$(agentweek.wholerecord, 3, 2)
+CLOSE #1
+CALL rename(p$ + num$ + ".db", p$ + num$ + ext$, s%)
+IF s% = 0 THEN GOTO failedterm
+
+CALL promptdisplay("", 20, 0, 0, 1)
+RESTORE DoneTerm
+READ al$
+CALL alertbox(15, 2, yn$)
+
+detail$(1, 1) = ""
+detail$(1, 0) = ""
+CALL displaysublevels(1, "", "")
+CALL ruboutmenu(4, t%, n%)
+EXIT SUB
+
+failedterm:
+CALL promptdisplay("", 20, 0, 0, 1)
+RESTORE UnSuccessful
+READ al$
+CALL alertbox(15, 3, yn$)
+CALL ruboutmenu(4, t%, n%)
+END SUB
+

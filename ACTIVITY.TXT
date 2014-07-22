@@ -1,0 +1,1036 @@
+DECLARE SUB openfile (filename$, filenum%, type$, reclen%, retry%)
+DECLARE SUB getseq (filenum%, g$, l%, retry%)
+DECLARE SUB getrandom (filenum%, t%, recnum%, retry%)
+DECLARE SUB killfile (filename$, retry%)
+DECLARE SUB checkprinter (retry%)
+DECLARE SUB displayss (startmonth%, endmonth%, startyear%, endyear%)
+DECLARE SUB menu (numberofoptions%, selection%, top%, t%, promptline%, rubout%)
+DECLARE SUB setmousepos (xmouse%, ymouse%)
+DECLARE SUB getmousestate (button%, xmouse%, ymouse%)
+DECLARE SUB otheroptions ()
+DECLARE SUB commentoptions (startyear%, endyear%, startmonth%, endmonth%)
+DECLARE SUB details (chooselevel%)
+DECLARE SUB promptdisplay (prompt$, promptline%, promptfore%, promptback%, clearline%)
+DECLARE SUB displaysublevels (disp%, levelpath1$, levelpath2$)
+DECLARE SUB alertbox (top%, numberofalerts%, yesorno$)
+DECLARE SUB updatedbrecnum (filename$, success%)
+DECLARE SUB ltable (startmonth%, endmonth%, startyear%, endyear%)
+DECLARE SUB updateconfig (success%)
+DECLARE SUB inputstr (length%, row%, startcol%, default$, type$, retvalue$, retkey$)
+DECLARE SUB targetprogress (filename$, weekstodate%, target$, weeks$, week1$, week2$, week3$, week4$, week5$, month$, f%, success%)
+DECLARE SUB dataentry ()
+DECLARE SUB targetset ()
+DECLARE SUB screenoutarray (s%)
+DECLARE SUB screeninarray (s%)
+DECLARE SUB setupsingle ()
+DECLARE SUB setupperiod ()
+DECLARE SUB setupratioscreen ()
+DECLARE SUB putscreenarray (put$, row%, col%, s%)
+DECLARE SUB printscreenarray (s%, startline%, endline%)
+DECLARE SUB timeselect (startmonth%, endmonth%, startyear%, endyear%, masterlev%)
+DECLARE FUNCTION getlevel$ (l%, plural%, short%)
+DECLARE FUNCTION monthnum2str$ (monthnum%, short%)
+DECLARE FUNCTION add$ (a$, b$)
+DECLARE FUNCTION ratio$ (ratio1$, ratio2$, money%)
+
+'$STATIC
+'$INCLUDE: 'common.inc'
+SCREEN 0
+WIDTH 80, 25
+
+colour$ = "150015001500150015000007150015001500"
+CLEAR , , 2048
+IF FRE(a$) < 25000 OR FRE(-1) < 100000 THEN
+        RESTORE NotEnoughMemory
+        READ al$
+        CALL alertbox(15, 2, y$)
+        GOTO QuitProgram
+END IF
+
+DIM SHARED detail$(1 TO 6, 1)
+DIM SHARED option$(32)
+DIM SHARED scr%(24, 79, 1, 1 TO 3)
+
+inreg.ax = 0
+CALL INTERRUPT(&H33, inreg, outreg)
+IF outreg.ax <> 0 AND (outreg.bx = 2 OR outreg.bx = 3) THEN mouse% = 1 ELSE mouse% = 0
+
+ON TIMER(1) GOSUB TimePrint
+ON KEY(1) GOSUB PromptPrint
+
+ON ERROR GOTO ErrorHandler
+
+CALL openfile("activity.cfg", 1, "SI", 1, retry%)
+IF retry% <> 1 THEN GOTO Fatal
+CALL getseq(1, colour$, 0, retry%)
+IF retry% <> 1 THEN GOTO Fatal
+CALL getseq(1, lastdate$, 0, retry%)
+IF retry% <> 1 THEN GOTO Fatal
+CALL getseq(1, path$, 0, retry%)
+IF retry% <> 1 THEN GOTO Fatal
+CLOSE #1
+
+CALL openfile(path$ + "level.cfg", 1, "SI", 1, retry%)
+IF retry% <> 1 THEN GOTO Fatal
+CALL getseq(1, m$, 0, retry%)
+IF retry% <> 1 THEN GOTO Fatal
+masterlevel% = VAL(m$)
+FOR i% = 5 TO 2 STEP -1
+        CALL getseq(1, detail$(i%, 1), 0, retry%)
+        IF retry% <> 1 THEN GOTO Fatal
+        CALL getseq(1, detail$(i%, 0), 0, retry%)
+        IF retry% <> 1 THEN GOTO Fatal
+NEXT
+CLOSE #1
+
+detail$(6, 0) = "uk"
+detail$(6, 1) = "U.K."
+
+FOR i% = 1 TO masterlevel% - 1
+        detail$(i%, 0) = ""
+        detail$(i%, 1) = ""
+NEXT
+
+lastyear% = VAL(RIGHT$(lastdate$, 4))
+lastmonth% = VAL(LEFT$(lastdate$, 2))
+lastday% = VAL(MID$(lastdate$, 4, 2))
+curyear% = VAL(RIGHT$(DATE$, 4))
+curmonth% = VAL(LEFT$(DATE$, 2))
+curday% = VAL(MID$(DATE$, 4, 2))
+
+FOR r% = 0 TO 24
+        FOR c% = 0 TO 79
+                FOR s% = 1 TO 3
+                        scr%(r%, c%, 0, s%) = 32
+                        scr%(r%, c%, 1, s%) = 0
+                NEXT
+        NEXT
+NEXT
+
+IF (lastyear% > curyear%) OR (lastyear% = curyear% AND lastmonth% > curmonth%) OR (lastyear% = curyear% AND lastmonth% = curmonth% AND lastday% > curday%) THEN
+        RESTORE DateError
+        READ al$
+        CALL alertbox(12, 3, yn$)
+        GOTO QuitProgram
+END IF
+
+COLOR 15, 0
+CLS
+RESTORE WelcomeMessage
+READ al$
+CALL alertbox(10, 2, yn$)
+
+startmonth% = VAL(LEFT$(DATE$, 2))
+startyear% = VAL(RIGHT$(DATE$, 4))
+endmonth% = startmonth%
+endyear% = startyear%
+period$ = monthnum2str$(endmonth%, 1) + STR$(endyear% MOD 100)
+CALL updateconfig(success%)
+IF success% = 0 THEN GOTO Fatal
+curmonth$ = monthnum2str$(endmonth%, 1)
+CALL updatedbrecnum(path$ + "uk.db", success%)
+IF success% = 0 THEN GOTO Fatal
+
+CLS
+GOSUB TimePrint
+TIMER ON
+Main:
+DO
+LOCATE 1, 73: PRINT "ACTIVITY";
+CALL displaysublevels(1, "", "")
+RESTORE MainMenu
+option$(0) = "Main Menu"
+FOR i% = 8 + masterlevel% TO 1 STEP -1
+        READ option$(i%)
+NEXT
+CALL menu(8 + masterlevel%, selection%, 4, 6, 25, 0)
+IF selection% <= masterlevel% THEN
+        chooselevel% = masterlevel% - selection% + 1
+        selection% = masterlevel%
+END IF
+ON selection% - masterlevel% + 1 GOSUB agentdetails, TimePeriod, EnterData, DisplayPeriod, Targeting, LeagueTable, Comments, Other, EndProg
+LOOP
+
+agentdetails:
+CALL details(chooselevel%)
+RETURN
+
+TimePeriod:
+CALL timeselect(startmonth%, endmonth%, startyear%, endyear%, masterlevel%)
+RETURN
+
+EnterData:
+IF detail$(1, 0) = "" THEN
+        RESTORE SelectAgent
+        READ al$
+        CALL alertbox(15, 2, yn$)
+ELSE
+        CALL dataentry
+END IF
+RETURN
+
+DisplayPeriod:
+CALL displayss(startmonth%, endmonth%, startyear%, endyear%)
+RETURN
+
+Targeting:
+CALL targetset
+RETURN
+
+LeagueTable:
+CALL ltable(startmonth%, endmonth%, startyear%, endyear%)
+RETURN
+
+Comments:
+CALL commentoptions(startyear%, endyear%, startmonth%, endmonth%)
+RETURN
+
+Other:
+CALL otheroptions
+RETURN
+
+EndProg:
+RESTORE AskQuit
+READ al$
+CALL alertbox(15, 1, yn$)
+IF yn$ = "y" THEN GOTO QuitProgram
+RETURN
+
+Fatal:
+RESTORE FatalError
+READ al$
+CALL alertbox(15, 2, yn$)
+
+QuitProgram:
+CLS
+PRINT "Thankyou for using ACTIVITY. Remember to Backup Data Regularly."
+END
+
+ErrorHandler:
+b$ = "Retry Operation (Y/N)?|"
+e% = 1
+SELECT CASE ERR
+       
+        CASE 53
+        RESTORE FileNotFound
+        READ al$
+        al$ = al$ + b$
+        CALL alertbox(15, 2, yn$)
+        IF yn$ = "y" THEN cont% = 1: RESUME ELSE cont% = 0: RESUME NEXT
+       
+        CASE 67
+        RESTORE TooManyFiles
+        READ al$
+        al$ = al$ + b$
+        CALL alertbox(15, 3, yn$)
+        cont% = 0: RESUME NEXT
+       
+        CASE 68
+        RESTORE DeviceNotReady
+        READ al$
+        al$ = al$ + b$
+        CALL alertbox(15, 2, yn$)
+        IF yn$ = "y" THEN cont% = 1: RESUME ELSE cont% = 0: RESUME NEXT
+       
+        CASE 71
+        RESTORE DiskNotReady
+        READ al$
+        al$ = al$ + b$
+        CALL alertbox(15, 2, yn$)
+        IF yn$ = "y" THEN cont% = 1: RESUME ELSE cont% = 0: RESUME NEXT
+       
+        CASE 52, 64
+        RESTORE InvalidFile
+        READ al$
+        al$ = al$ + b$
+        CALL alertbox(15, 2, yn$)
+        IF yn$ = "y" THEN cont% = 1: RESUME ELSE cont% = 0: RESUME NEXT
+       
+        CASE 58
+        RESTORE FileAlreadyExists
+        READ al$
+        al$ = al$ + b$
+        CALL alertbox(15, 2, yn$)
+        IF yn$ = "y" THEN cont% = 1: RESUME ELSE cont% = 0: RESUME NEXT
+       
+        CASE 61
+        IF backup% = 0 THEN
+                RESTORE DiskFull
+                READ al$
+                al$ = al$ + b$
+                CALL alertbox(15, 2, yn$)
+                IF yn$ = "y" THEN cont% = 1: RESUME ELSE cont% = 0: RESUME NEXT
+        ELSE
+                cont% = 2
+                RESUME NEXT
+        END IF
+       
+        CASE 70
+        RESTORE AccessDenied
+        READ al$
+        al$ = al$ + b$
+        CALL alertbox(15, 2, yn$)
+        IF yn$ = "y" THEN cont% = 1: RESUME ELSE cont% = 0: RESUME NEXT
+       
+        CASE 72
+        RESTORE DiskError
+        READ al$
+        al$ = al$ + b$
+        CALL alertbox(15, 2, yn$)
+        IF yn$ = "y" THEN cont% = 1: RESUME ELSE cont% = 0: RESUME NEXT
+       
+        CASE 75
+        RESTORE PathFileAccess
+        READ al$
+        al$ = al$ + b$
+        CALL alertbox(15, 2, yn$)
+        IF yn$ = "y" THEN cont% = 1: RESUME ELSE cont% = 0: RESUME NEXT
+       
+        CASE 76
+        RESTORE PathNotFound
+        READ al$
+        al$ = al$ + b$
+        CALL alertbox(15, 2, yn$)
+        IF yn$ = "y" THEN cont% = 1: RESUME ELSE cont% = 0: RESUME NEXT
+       
+        CASE 24
+        RESTORE DeviceTimeout
+        READ al$
+        al$ = al$ + b$
+        CALL alertbox(15, 2, yn$)
+        IF yn$ = "y" THEN cont% = 1: RESUME ELSE cont% = 0: RESUME NEXT
+       
+        CASE 25
+        RESTORE DeviceFault
+        READ al$
+        al$ = al$ + b$
+        CALL alertbox(15, 2, yn$)
+        IF yn$ = "y" THEN cont% = 1: RESUME ELSE cont% = 0: RESUME NEXT
+       
+        CASE 27
+        RESTORE PrinterPaper
+        READ al$
+        al$ = al$ + b$
+        CALL alertbox(15, 2, yn$)
+        IF yn$ = "y" THEN cont% = 1: RESUME ELSE cont% = 0: RESUME NEXT
+       
+        CASE 57
+        RESTORE DeviceError
+        READ al$
+        al$ = al$ + b$
+        CALL alertbox(15, 2, yn$)
+        IF yn$ = "y" THEN cont% = 1: RESUME ELSE cont% = 0: RESUME NEXT
+       
+        CASE ELSE
+        GOTO Fatal
+
+END SELECT
+
+AskQuit:
+DATA Are You SURE You Want To Quit (Y/N)?|
+
+FatalError:
+DATA Fatal Error|PAK To Exit ACTIVITY|
+
+DeviceTimeout:
+DATA Device Timeout Error|
+
+DeviceFault:
+DATA Device Fault Error|
+
+DeviceError:
+DATA Device Error|
+
+PrinterPaper:
+DATA Printer Out Of Paper Error|
+
+InvalidFile:
+DATA Invalid File Error|
+
+FileNotFound:
+DATA File Not Found Error|
+
+PathNotFound:
+DATA Path Not Found Error|
+
+TooManyFiles:
+DATA Too Many Files Open Error|Quit ACTIVITY And Make Sure That|In CONFIG.SYS FILES=8 Or More|
+
+DiskFull:
+DATA Disk Full Error|
+
+FileAlreadyExists:
+DATA File Already Exists Error|
+
+DeviceNotReady:
+DATA Device Not Ready Error|
+
+DiskNotReady:
+DATA Disk Not Ready Error|
+
+DiskError:
+DATA Disk Error|
+
+PathFileAccess:
+DATA Path/File Access Error|
+
+AccessDenied:
+DATA Access Denied Error|
+
+NotEnoughMemory:
+DATA Not Enough Free Base Memory To Run ACTIVITY|Press Any Key To Exit|
+
+PromptPrint:
+pr% = 1
+RETURN
+
+TimePrint:
+x% = CSRLIN
+y% = POS(0)
+LOCATE 1, 1, 0
+COLOR VAL(MID$(colour$, 25, 2)), VAL(MID$(colour$, 27, 2))
+PRINT MID$(DATE$, 4, 2); " "; curmonth$; " "; RIGHT$(DATE$, 4); " "; TIME$;
+LOCATE x%, y%
+RETURN
+
+MainMenu:
+DATA Quit|Exit From ACTIVITY
+DATA Other Options|Setup and Maintenance
+DATA Comments|Review Comments for the Chosen Period
+DATA League Table|League Table for the Chosen Period
+DATA Targeting|Target Planning for Next Month
+DATA Display|Display Figures for the Chosen Period
+DATA Input Data|Enter Activity for This Month
+DATA Time Period|Choose the Period to Review
+DATA Adviser Details|Access Advisers' Databases
+DATA Team Details|Access Sales Teams' Databases
+DATA Branch Details|Access Branches' Databases
+DATA Snr Branch Details|Access Senior Branches' Databases
+DATA Region Details|Access Regions' Databases
+
+SelectAgent:
+DATA Select An Adviser Database Before Inputting Data|PAK|
+
+NoDataAvailable:
+DATA There Is No Data Available|PAK|
+
+TooLarge:
+DATA One Of The Numbers Is Too Large|Please Check The Data|PAK|
+
+UnSuccessfulTarget:
+DATA Unsuccessful Attempt To Get Target Data|Try To Do Without Target (Y/N)?|
+
+UnSuccessful:
+DATA Unsuccessful Attempt To Retrieve Data|Operation Aborted|PAK|
+
+IsItCorrect:
+DATA Is This Correct (Y/N)?|
+
+WelcomeMessage:
+DATA Welcome To ACTIVITY|PAK To Begin|
+
+DateError:
+DATA The System Date Has Been Put Back Since ACTIVITY Was Last Used|Please Set The System Date Properly In Order To Use ACTIVITY|PAK|
+
+SUB checkprinter (retry%)
+
+e% = 0
+retry% = 1
+LPRINT CHR$(27); "6";
+IF e% = 1 THEN retry% = cont%
+
+END SUB
+
+SUB dialogbox (t$, i$, numberofinputs%, top%)
+
+borderfore% = VAL(MID$(colour$, 29, 2))
+borderback% = VAL(MID$(colour$, 31, 2))
+textfore% = VAL(MID$(colour$, 33, 2))
+textback% = VAL(MID$(colour$, 35, 2))
+
+DIM text$(numberofinputs% - 1)
+DIM inp$(numberofinputs% - 1, 2)
+
+FOR i% = 0 TO numberofinputs% - 1
+        text$(i%) = LEFT$(t$, INSTR(t$, "|") - 1)
+        IF i% < numberofinputs% - 1 THEN t$ = MID$(t$, INSTR(t$, "|") + 1)
+        a$ = LEFT$(i$, INSTR(i$, "|") - 1)
+        IF i% < numberofinputs% - 1 THEN i$ = MID$(i$, INSTR(i$, "|") + 1)
+        FOR j% = 0 TO 2
+                inp$(i%, j%) = LEFT$(a$, INSTR(a$, "*") - 1)
+                IF j% < 2 THEN a$ = MID$(a$, INSTR(a$, "*") + 1)
+        NEXT
+NEXT
+
+longtext% = 0
+longinp% = 0
+FOR i% = 0 TO numberofinputs% - 1
+        IF LEN(text$(i%)) > longtext% THEN longtext% = LEN(text$(i%))
+        IF VAL(inp$(i%, 1)) > longinp% THEN longinp% = VAL(inp$(i%, 1))
+NEXT
+IF longtext% + longinp% + 3 > 80 THEN EXIT SUB
+IF top% + numberofinputs% + 2 > 25 THEN EXIT SUB
+
+t% = INT((80 - longtext% - longinp% - 3) / 2) + 1
+      
+DIM s%(numberofinputs% + 1, longtext% + longinp% + 2, 1)
+FOR i% = 0 TO numberofinputs% + 1
+        FOR j% = 0 TO longtext% + longinp% + 2
+                s%(i%, j%, 0) = SCREEN(top% + i%, t% + j%)
+                s%(i%, j%, 1) = SCREEN(top% + i%, t% + j%, 1)
+        NEXT
+NEXT
+
+COLOR borderfore%, borderback%
+LOCATE top%, t%: PRINT CHR$(201); STRING$(longtext%, 205); CHR$(209); STRING$(longinp%, 205); CHR$(187);
+FOR i% = 1 TO numberofinputs%
+        LOCATE top% + i%, t%: PRINT CHR$(186);
+        LOCATE top% + i%, t% + longtext% + 1: PRINT CHR$(179);
+        LOCATE top% + i%, t% + longtext% + longinp% + 2: PRINT CHR$(186);
+NEXT
+LOCATE top% + numberofinputs% + 1, t%: PRINT CHR$(200); STRING$(longtext%, 205); CHR$(207); STRING$(longinp%, 205); CHR$(188);
+
+COLOR textfore%, textback%
+FOR i% = 0 TO numberofinputs% - 1
+        LOCATE top% + i% + 1, t% + 1: PRINT text$(i%); SPACE$(longtext% - LEN(text$(i%)));
+        LOCATE top% + i% + 1, t% + longtext% + 2: PRINT SPACE$(longinp%);
+NEXT
+
+DO
+i% = 0
+DO
+        CALL inputstr(VAL(inp$(i%, 1)), top% + i% + 1, t% + longtext% + 2, inp$(i%, 0), inp$(i%, 2), r$, k$)
+        inp$(i%, 0) = r$
+        SELECT CASE k$
+
+                CASE "up"
+                i% = i% - 1: IF i% = -1 THEN i% = numberofinputs% - 1
+             
+                CASE "down"
+                i% = i% + 1: IF i% = numberofinputs% THEN i% = 0
+             
+                CASE "ret"
+                i% = i% + 1: IF i% = numberofinputs% THEN i% = 0: k$ = "esc"
+              
+                CASE ELSE
+
+        END SELECT
+LOOP UNTIL k$ = "esc"
+
+t$ = ""
+RESTORE IsItCorrect
+READ al$
+CALL alertbox(19, 1, yn$)
+IF yn$ = "esc" THEN
+        t$ = "esc"
+END IF
+LOOP UNTIL yn$ <> "n"
+
+i$ = ""
+FOR i% = 0 TO numberofinputs% - 1
+        i$ = i$ + inp$(i%, 0) + "|"
+NEXT
+i$ = LEFT$(i$, LEN(i$) - 1)
+      
+        FOR i% = 0 TO numberofinputs% + 1
+                FOR j% = 0 TO longtext% + longinp% + 2
+                        LOCATE top% + i%, t% + j%
+                        IF s%(i%, j%, 1) < 128 THEN
+                                COLOR s%(i%, j%, 1) MOD 16, INT(s%(i%, j%, 1) / 16)
+                        ELSEIF s%(i%, j%, 1) > 239 THEN
+                                COLOR s%(i%, j%, 1) MOD 32, INT(s%(i%, j%, 1) / 32)
+                        ELSE
+                                COLOR (s%(i%, j%, 1) - 112) MOD 32, INT((s%(i%, j%, 1) - 112) / 32)
+                        END IF
+                        PRINT CHR$(s%(i%, j%, 0));
+                NEXT
+        NEXT
+        ERASE s%
+        
+END SUB
+
+SUB displayss (startmonth%, endmonth%, startyear%, endyear%)
+
+FOR i% = 1 TO 6
+        IF detail$(i%, 0) = "" THEN l% = i% + 1
+NEXT
+IF l% = 0 THEN l% = 1
+
+DIM field$(13, 6)
+curyear% = VAL(RIGHT$(DATE$, 4))
+curmonth% = VAL(LEFT$(DATE$, 2))
+name$ = detail$(l%, 1)
+num$ = detail$(l%, 0)
+detail$(l%, 1) = ""
+detail$(l%, 0) = ""
+CALL displaysublevels(0, levelpath1$, levelpath2$)
+detail$(l%, 1) = name$
+detail$(l%, 0) = num$
+IF l% > 1 THEN name$ = name$ + " " + getlevel$(l%, 0, 0)
+IF l% = 6 THEN info$ = "U.K." ELSE info$ = name$ + "  " + num$
+
+
+file$ = path$
+FOR i% = 5 TO l% + 1 STEP -1
+        file$ = file$ + detail$(i%, 0) + "\"
+NEXT
+file$ = file$ + detail$(l%, 0) + "."
+
+array% = 1
+IF startmonth% <> curmonth% AND startyear% <> endyear% THEN
+        period$ = monthnum2str$(startmonth%, 1) + STR$(startyear%) + " - " + monthnum2str$(endmonth%, 1) + STR$(endyear%)
+ELSE
+        period$ = monthnum2str$(startmonth%, 1) + STR$(startyear%)
+END IF
+
+IF startyear% = endyear% AND startmonth% = endmonth% THEN sing% = 1 ELSE sing% = 0
+
+IF startyear% < curyear% THEN
+        CALL openfile(file$ + LTRIM$(RTRIM$(STR$(startyear% MOD 100))), 2, "R", 148, retry%)
+        IF retry% = 0 THEN GOTO bombout3
+        l% = LOF(2) / 148
+        CLOSE #2
+        IF l% = 0 THEN
+                CALL killfile(file$ + LTRIM$(RTRIM$(STR$(startyear% MOD 100))), retry%)
+                IF retry% = 0 THEN GOTO bombout3
+                RESTORE NoDataAvailable
+                READ al$
+                CALL alertbox(15, 2, yn$)
+                EXIT SUB
+        END IF
+END IF
+
+CLS
+
+CALL promptdisplay("Please wait...", 23, VAL(MID$(colour$, 25, 2)), VAL(MID$(colour$, 27, 2)), 1)
+
+IF sing% = 1 THEN CALL setupsingle: left% = 3 ELSE CALL setupperiod: left% = 16
+CALL setupratioscreen
+top% = 3
+
+IF sing% = 1 THEN
+ 
+        startrec% = (startmonth% * 5) - 4
+        filename$ = file$ + LTRIM$(RTRIM$(STR$(startyear% MOD 100)))
+        IF startyear% = curyear% THEN filename$ = file$ + "db"
+
+        CALL openfile(filename$, 2, "R", 148, retry%)
+        IF retry% = 0 THEN GOTO bombout3
+        maxrec% = (LOF(2) / 148) - 12
+   
+        weekstodate% = 0
+        DIM targetweekdata$(5)
+        FOR i% = 1 TO 5
+                CALL getrandom(2, 2, startrec% + i% - 1, retry%)
+                IF retry% = 0 THEN GOTO bombout3
+                FOR j% = 1 TO 13
+                        field$(j%, i%) = LTRIM$(RTRIM$(MID$(agentweek.wholerecord, (7 * j%) + 1, 7)))
+                NEXT
+        IF LTRIM$(RTRIM$(agentweek.wholerecord)) <> "" THEN weekstodate% = weekstodate% + 1
+        targetweekdata$(i%) = LEFT$(agentweek.wholerecord, 98)
+        NEXT
+   
+        IF startmonth% = 1 THEN
+                CLOSE #2
+                CALL openfile(file$ + LTRIM$(RTRIM$(STR$((startyear% - 1) MOD 100))), 2, "R", 148, retry%)
+                IF retry% = 0 THEN GOTO bombout3
+                maxrec% = (LOF(2) / 148) - 12
+                IF maxrec% > 0 THEN
+                        CALL getrandom(2, 2, maxrec%, retry%)
+                ELSE
+                        agentweek.wholerecord = SPACE$(148)
+                END IF
+                IF retry% = 0 THEN GOTO bombout3
+                CLOSE #2
+                CALL openfile(filename$, 2, "R", 148, retry%)
+                IF retry% = 0 THEN GOTO bombout3
+                maxrec% = (LOF(2) / 148) - 12
+        ELSE
+                CALL getrandom(2, 2, maxrec% + startmonth% - 1, retry%)
+                IF retry% = 0 THEN GOTO bombout3
+        END IF
+        FOR j% = 1 TO 13
+                field$(j%, 6) = LTRIM$(RTRIM$(MID$(agentweek.wholerecord, (7 * j%) - 6, 7)))
+        NEXT
+        target$ = LTRIM$(RTRIM$(MID$(agentweek.wholerecord, 102, 8)))
+        weeks$ = LTRIM$(MID$(agentweek.wholerecord, 110, 1))
+        f% = VAL(LTRIM$(MID$(agentweek.wholerecord, 111, 1)))
+        targetmonthdata$ = LEFT$(agentweek.wholerecord, 98)
+        CLOSE #2
+   
+        FOR j% = 1 TO 6
+                FOR i% = 1 TO 13
+                        IF field$(i%, j%) <> "" THEN
+                                LOCATE top% + 3 + i%, left% + 20 + (j% - 1) * 9
+                                IF i% <> 10 AND i% <> 11 THEN
+                                        PRINT SPACE$(8 - LEN(field$(i%, j%))); field$(i%, j%)
+                                ELSE
+                                        PRINT SPACE$(7 - LEN(field$(i%, j%))); ""; field$(i%, j%)
+                                END IF
+                        END IF
+                NEXT
+        NEXT
+   
+ELSEIF sing% = 0 THEN
+
+        manmonths& = 0
+        y% = startyear%
+        DO
+                IF startyear% = endyear% THEN
+                        beginm% = startmonth%: stopm% = endmonth%
+                ELSEIF y% = endyear% THEN
+                        beginm% = 1: stopm% = endmonth%
+                ELSEIF y% = startyear% THEN
+                        beginm% = startmonth%: stopm% = 12
+                ELSE
+                        beginm% = 1: stopm% = 12
+                END IF
+
+                IF y% <> curyear% THEN filename$ = LEFT$(filename$, LEN(filename$) - 2) + LTRIM$(RTRIM$(STR$(y% MOD 100))) ELSE filename$ = LEFT$(filename$, LEN(filename$) - 2) + "db"
+                CALL openfile(filename$, 2, "R", 148, retry%)
+                IF retry% = 0 THEN GOTO bombout3
+                maxrec% = (LOF(2) / 148) - 12
+                FOR i% = beginm% TO stopm%
+                        CALL getrandom(2, 2, maxrec% + i%, retry%)
+                        IF retry% = 0 THEN GOTO bombout3
+                        FOR j% = 1 TO 13
+                             
+                             
+                                r$ = add$(field$(j%, 1), MID$(agentweek.wholerecord, (7 * j%) - 6, 7))
+                                field$(j%, 1) = r$
+                                field$(j%, 6) = r$
+                        NEXT
+                        manm$ = add$(MID$(agentweek.wholerecord, 92, 10), mm$)
+                        mm$ = manm$
+                NEXT
+                CLOSE #2
+                y% = y% + 1
+        LOOP UNTIL y% > endyear%
+        manmonths& = VAL(mm$)
+
+        FOR j% = 1 TO 13
+                IF field$(j%, 1) <> "" AND manmonths& <> 0 THEN
+                        average# = VAL(field$(j%, 1)) / manmonths&
+                        IF j% = 11 OR j% = 10 THEN
+                                IF average# - INT(average#) >= .5 THEN average# = average# + 1
+                                field$(j%, 2) = LTRIM$(RTRIM$(STR$(INT(average#))))
+                        ELSE
+                                field$(j%, 2) = LTRIM$(RTRIM$(STR$(INT(average#)))) + "." + LTRIM$(RTRIM$(STR$(CINT((average# - INT(average#)) * 100))))
+                                IF MID$(field$(j%, 2), LEN(field$(j%, 2)) - 1, 1) = "." THEN field$(j%, 2) = field$(j%, 2) + "0"
+                        END IF
+                ELSE
+                        field$(j%, 2) = ""
+                END IF
+        NEXT
+   
+        FOR i% = 1 TO 13
+                IF LEN(field$(i%, 1)) > 9 OR LEN(field$(i%, 2)) > 8 THEN
+                        RESTORE TooLarge
+                        READ al$
+                        CALL alertbox(15, 3, yn$)
+                        CLS
+                        EXIT SUB
+                END IF
+                IF i% <> 11 AND i% <> 10 THEN
+                        LOCATE top% + 4 + i%, left% + 24
+                        PRINT SPACE$(9 - LEN(LTRIM$(RTRIM$(field$(i%, 1))))); LTRIM$(RTRIM$(field$(i%, 1)))
+                        LOCATE top% + 4 + i%, left% + 37
+                        PRINT SPACE$(8 - LEN(LTRIM$(RTRIM$(field$(i%, 2))))); LTRIM$(RTRIM$(field$(i%, 2)))
+                ELSE
+                        LOCATE top% + 4 + i%, left% + 23
+                        IF field$(i%, 1) <> "" THEN PRINT SPACE$(9 - LEN(LTRIM$(RTRIM$(field$(i%, 1))))); ""; LTRIM$(RTRIM$(field$(i%, 1)))
+                        LOCATE top% + 4 + i%, left% + 36
+                        IF field$(i%, 2) <> "" THEN PRINT SPACE$(8 - LEN(LTRIM$(RTRIM$(field$(i%, 2))))); ""; LTRIM$(RTRIM$(field$(i%, 2)))
+                END IF
+        NEXT
+
+END IF
+
+        r$ = ratio$(field$(1, 6), field$(2, 6), 0)
+        CALL putscreenarray(r$, 9, 48, 2)
+        r$ = ratio$(field$(4, 6), field$(6, 6), 0)
+        CALL putscreenarray(r$, 10, 48, 2)
+        r$ = ratio$(field$(6, 6), field$(5, 6), 0)
+        CALL putscreenarray(r$, 11, 48, 2)
+        r$ = ratio$(field$(5, 6), field$(8, 6), 0)
+        CALL putscreenarray(r$, 12, 48, 2)
+        r$ = ratio$(field$(13, 6), field$(3, 6), 0)
+        CALL putscreenarray(r$, 13, 48, 2)
+        'Do the  value ratios
+        r$ = ratio$(field$(10, 6), field$(1, 6), 1)
+        CALL putscreenarray(r$, 5, 48, 2)
+        r$ = ratio$(field$(10, 6), field$(5, 6), 1)
+        CALL putscreenarray(r$, 6, 48, 2)
+        r$ = ratio$(field$(10, 6), field$(8, 6), 1)
+        CALL putscreenarray(r$, 7, 48, 2)
+        r$ = ratio$(field$(11, 6), field$(9, 6), 1)
+        CALL putscreenarray(LTRIM$(RTRIM$(r$)), 22, 53, 2)
+        r$ = ratio$(field$(7, 6), field$(6, 6), 0)
+        r$ = LTRIM$(RTRIM$(r$))
+        r$ = " " + MID$(r$, INSTR(r$, ".") + 1, 2)
+        IF r$ = " 00" THEN r$ = "  0"
+        IF VAL(field$(7, 6)) >= VAL(field$(6, 6)) THEN r$ = "100"
+        IF VAL(field$(6, 6)) = 0 THEN r$ = ""
+        CALL putscreenarray(r$, 19, 39, 2)
+        r$ = ratio$(field$(9, 6), field$(8, 6), 0)
+        r$ = LTRIM$(RTRIM$(r$))
+        r$ = " " + MID$(r$, INSTR(r$, ".") + 1, 2)
+        IF r$ = " 00" THEN r$ = "  0"
+        IF VAL(field$(9, 6)) >= VAL(field$(8, 6)) THEN r$ = "100"
+        IF VAL(field$(8, 6)) = 0 THEN r$ = ""
+        CALL putscreenarray(r$, 20, 39, 2)
+        r$ = ratio$(field$(11, 6), field$(10, 6), 0)
+        r$ = LTRIM$(RTRIM$(r$))
+        r$ = " " + MID$(r$, INSTR(r$, ".") + 1, 2)
+        IF r$ = " 00" THEN r$ = "  0"
+        IF VAL(field$(11, 6)) >= VAL(field$(10, 6)) THEN r$ = "100"
+        IF VAL(field$(10, 6)) = 0 THEN r$ = ""
+        CALL putscreenarray(r$, 21, 39, 2)
+
+IF startmonth% <> curmonth% OR startyear% <> curyear% OR l% <> 1 THEN target$ = ""
+
+IF target$ <> "" THEN
+        CALL targetprogress(file$, weekstodate%, target$, weeks$, targetweekdata$(1), targetweekdata$(2), targetweekdata$(3), targetweekdata$(4), targetweekdata$(5), targetmonthdata$, f%, s%)
+        IF s% = 0 THEN
+                RESTORE UnSuccessfulTarget
+                READ al$
+                CALL alertbox(15, 2, yn$)
+                IF yn$ = "yes" THEN
+                        target$ = ""
+                ELSE
+                        GOTO bombout3
+                END IF
+        END IF
+END IF
+   
+CALL screeninarray(1)
+CALL promptdisplay(info$ + "   " + period$, top% - 1, 15, 0, 1)
+CALL putscreenarray("              ", 23, 34, 1)
+CALL promptdisplay("", 23, 0, 0, 1)
+
+waitkey:
+SELECT CASE array%
+CASE 1
+IF target$ <> "" THEN
+        CALL promptdisplay("P - Print, R - Ratios, T - Target Progress, Any Other Key - Main Menu", 25, 15, 0, 1)
+ELSE
+        CALL promptdisplay("P - Print, R - Ratios, Any Other Key - Main Menu", 25, 15, 0, 1)
+END IF
+CASE 2
+IF target$ <> "" THEN
+        CALL promptdisplay("P - Print, S - Spreadsheet, T - Target Progress, Any Other Key - Main Menu", 25, 15, 0, 1)
+ELSE
+        CALL promptdisplay("P - Print, S - Spreadsheet, Any Other Key - Main Menu", 25, 15, 0, 1)
+END IF
+CASE 3
+CALL promptdisplay("P - Print, S - Spreadsheet, R - Ratios, Any Other Key - Main Menu", 25, 15, 0, 1)
+END SELECT
+
+DO
+k$ = INKEY$
+LOOP UNTIL k$ <> ""
+CALL promptdisplay("", 25, 0, 0, 1)
+
+IF k$ = "P" OR k$ = "p" THEN
+        CALL promptdisplay("How Many Copies (1-5)?", 25, 15, 0, 1)
+        DO
+        k$ = INKEY$
+        LOOP UNTIL k$ <> "" AND k$ <> "p" AND k$ <> "P"
+        IF ASC(k$) = 27 THEN CLS : EXIT SUB
+        p% = VAL(k$): IF p% = 0 OR p% > 5 THEN p% = 1
+        CALL promptdisplay("Printing...", 23, 15, 0, 1)
+        CALL checkprinter(retry%)
+        IF retry% = 1 THEN
+                FOR i% = 1 TO p%
+                        LPRINT CHR$(27); "6";
+                        LPRINT CHR$(13); CHR$(13); CHR$(13); CHR$(13);
+                        LPRINT SPACE$(63); "ษออออออออออป"
+                        LPRINT SPACE$(63); "บ ACTIVITY บ"
+                        LPRINT SPACE$(63); "ศออออออออออผ"
+                        LPRINT CHR$(13);
+                        LPRINT SPACE$((80 - LEN(info$)) / 2); info$;
+                        LPRINT CHR$(13); CHR$(13);
+                        IF array% <> 3 THEN
+                                LPRINT SPACE$((57 - LEN(period$)) / 2); "Results and Ratios for " + period$;
+                        ELSE
+                                LPRINT SPACE$((57 - LEN(period$)) / 2); "Target Progress for " + period$;
+                        END IF
+                        LPRINT CHR$(13); CHR$(13);
+                        IF levelpath2$ <> "" THEN
+                                LPRINT SPACE$((80 - LEN(levelpath1$) - LEN(levelpath2$) - 3) / 2); levelpath1$ + " - " + levelpath2$;
+                        ELSE
+                                LPRINT SPACE$((80 - LEN(levelpath1$)) / 2); levelpath1$;
+                        END IF
+                        LPRINT CHR$(13); CHR$(13);
+                        IF array% <> 3 THEN
+                                CALL printscreenarray(1, 4, 21)
+                                LPRINT CHR$(13); CHR$(13); CHR$(13);
+                                CALL printscreenarray(2, 4, 23)
+                        ELSE
+                                CALL printscreenarray(3, 3, 22)
+                                FOR lines% = 1 TO 21
+                                        LPRINT CHR$(13);
+                                NEXT
+                        END IF
+                        LPRINT CHR$(13); CHR$(13); CHR$(13);
+                        LPRINT CHR$(13); CHR$(13); CHR$(13); CHR$(13);
+                        LPRINT SPACE$(2); MID$(DATE$, 4, 2); "/"; LEFT$(DATE$, 2); "/"; RIGHT$(DATE$, 4); SPACE$(68);
+                        LPRINT CHR$(12);
+                        CALL promptdisplay("", 23, 15, 0, 1)
+                        GOTO waitkey
+                NEXT
+        ELSE
+                GOTO waitkey
+        END IF
+END IF
+
+
+IF k$ = "R" OR k$ = "r" THEN
+        IF array% = 1 OR array% = 3 THEN
+                CALL screenoutarray(2)
+                array% = 2
+                CALL promptdisplay(info$ + "   " + period$, top% - 1, 15, 0, 1)
+                GOTO waitkey
+        ELSEIF array% = 2 THEN
+                GOTO waitkey
+        END IF
+END IF
+
+IF k$ = "S" OR k$ = "s" THEN
+        IF array% = 2 OR array% = 3 THEN
+                CALL screenoutarray(1)
+                array% = 1
+                CALL promptdisplay(info$ + "   " + period$, top% - 1, 15, 0, 1)
+                GOTO waitkey
+        ELSEIF array% = 1 THEN
+                GOTO waitkey
+        END IF
+END IF
+
+IF (k$ = "T" OR k$ = "t") AND target$ <> "" THEN
+        IF array% = 2 OR array% = 1 THEN
+                CALL screenoutarray(3)
+                array% = 3
+                CALL promptdisplay(info$ + "   " + period$, top% - 1, 15, 0, 1)
+                GOTO waitkey
+        ELSEIF array% = 3 THEN
+                GOTO waitkey
+        END IF
+END IF
+
+CLS
+EXIT SUB
+
+bombout3:
+CLOSE
+RESTORE UnSuccessful
+READ al$
+CALL alertbox(15, 3, yn$)
+CLS
+
+END SUB
+
+SUB getrandom (filenum%, t%, recnum%, retry%)
+
+e% = 0
+retry% = 1
+IF t% = 1 THEN
+        GET #filenum%, recnum%, agentsinteam
+ELSE
+        GET #filenum%, recnum%, agentweek
+END IF
+IF e% = 1 THEN retry% = cont%
+
+END SUB
+
+SUB getseq (filenum%, g$, l%, retry%)
+
+e% = 0
+retry% = 1
+IF l% = 1 THEN
+        LINE INPUT #filenum%, g$
+ELSE
+        INPUT #filenum%, g$
+END IF
+
+IF mouse% <> 2 THEN g$ = LTRIM$(RTRIM$(g$))
+IF e% = 1 THEN retry% = cont%
+
+END SUB
+
+SUB killfile (filename$, retry%)
+
+e% = 0
+retry% = 1
+KILL filename$
+IF e% = 1 THEN retry% = cont%
+
+END SUB
+
+SUB makedir (dir$, retry%)
+
+e% = 0
+retry% = 1
+MKDIR dir$
+IF e% = 1 THEN retry% = cont%
+
+END SUB
+
+SUB openfile (filename$, filenum%, type$, reclen%, retry%)
+
+retry% = 1
+e% = 0
+IF type$ = "R" THEN
+        OPEN filename$ FOR RANDOM AS #filenum% LEN = reclen%
+ELSEIF type$ = "SI" THEN
+        OPEN filename$ FOR INPUT AS #filenum%
+ELSE
+        OPEN filename$ FOR OUTPUT AS #filenum%
+END IF
+IF e% = 1 THEN retry% = cont%
+
+END SUB
+
+SUB putrandom (filenum%, t%, recnum%, retry%)
+
+e% = 0
+retry% = 1
+IF t% = 1 THEN
+        PUT #filenum%, recnum%, agentsinteam
+ELSE
+        PUT #filenum%, recnum%, agentweek
+END IF
+IF e% = 1 THEN retry% = cont%
+
+END SUB
+
+SUB putseq (filenum%, p$, retry%)
+
+e% = 0
+retry% = 1
+p$ = LTRIM$(RTRIM$(p$))
+
+PRINT #filenum%, p$
+
+IF e% = 1 THEN retry% = cont%
+
+END SUB
+
+SUB remdir (dir$, retry%)
+
+e% = 0
+retry% = 1
+RMDIR dir$
+IF e% = 1 THEN retry% = cont%
+
+END SUB
+
+SUB rename (old$, new$, retry%)
+
+e% = 0
+retry% = 1
+NAME old$ AS new$
+IF e% = 1 THEN retry% = cont%
+
+END SUB
+
